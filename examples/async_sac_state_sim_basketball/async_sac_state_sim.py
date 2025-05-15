@@ -34,12 +34,13 @@ import basketball_environment
 register(
     id="FrankaBasket-v0",
     entry_point="basketball_environment:FrankaBasketEnv",
-    max_episode_steps=200,
+    max_episode_steps=100,
 )
 
 FLAGS = flags.FLAGS
 
 # flags.DEFINE_string("env", "HalfCheetah-v4", "Name of environment.")
+# flags.DEFINE_string("env", "PandaPickCube-v0", "Name of environment.")
 flags.DEFINE_string("env", "FrankaBasket-v0", "Name of environment.")
 flags.DEFINE_string("agent", "sac", "Name of agent.")
 flags.DEFINE_string(
