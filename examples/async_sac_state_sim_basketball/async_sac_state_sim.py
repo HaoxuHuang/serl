@@ -32,8 +32,8 @@ from gym.envs.registration import register
 
 import basketball_environment
 register(
-    id="FrankaBasket-v0",
-    entry_point="basketball_environment:FrankaBasketEnv",
+    id="Basket-v0",
+    entry_point="basketball_environment:BasketEnv",
     max_episode_steps=100,
 )
 
@@ -41,7 +41,7 @@ FLAGS = flags.FLAGS
 
 # flags.DEFINE_string("env", "HalfCheetah-v4", "Name of environment.")
 # flags.DEFINE_string("env", "PandaPickCube-v0", "Name of environment.")
-flags.DEFINE_string("env", "FrankaBasket-v0", "Name of environment.")
+flags.DEFINE_string("env", "Basket-v0", "Name of environment.")
 flags.DEFINE_string("agent", "sac", "Name of agent.")
 flags.DEFINE_string(
     "exp_name", None, "Name of the experiment for wandb logging.")
@@ -112,7 +112,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     client.recv_network_callback(update_params)
 
     eval_env = gym.make(FLAGS.env)
-    if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "FrankaBasket-v0":
+    if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
         eval_env = gym.wrappers.FlattenObservation(eval_env)
     eval_env = RecordEpisodeStatistics(eval_env)
 
@@ -289,7 +289,7 @@ def main(_):
     else:
         env = gym.make(FLAGS.env)
 
-    if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "FrankaBasket-v0":
+    if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
         env = gym.wrappers.FlattenObservation(env)
 
     rng, sampling_rng = jax.random.split(rng)

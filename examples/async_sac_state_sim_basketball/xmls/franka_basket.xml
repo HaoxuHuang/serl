@@ -122,12 +122,12 @@
 
   <worldbody>
     <!-- 地面 -->
-    <geom name="floor" type="plane" pos="0 0 0" size="5 5 0.1" rgba="0.8 0.8 0.8 1"/>
+    <!-- <geom name="floor" type="plane" pos="0 0 0" size="5 5 0.1" rgba="0.8 0.8 0.8 1"/>
 
     <body name="ball" pos="0.7 0 0.1">
       <freejoint name="block"/>
       <geom name="block" type="sphere" size="0.03" mass="0.62"/>
-    </body>
+    </body> -->
 
     
     <light name="top" pos="0 0 2" mode="trackcom"/>

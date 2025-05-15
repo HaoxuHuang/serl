@@ -67,6 +67,8 @@
     <mesh name="link5_c2" file="franka_emika_panda/assets/link5_collision_2.obj"/>
     <mesh name="link6_c" file="franka_emika_panda/assets/link6.stl"/>
     <mesh name="link7_c" file="franka_emika_panda/assets/link7.stl"/>
+    <mesh name="hand_c" file="franka_emika_panda/assets/ball_thrower.stl" scale="0.0005 0.0005 0.0005"/> 
+
     <mesh file="franka_emika_panda/assets/link0_0.obj"/>
     <mesh file="franka_emika_panda/assets/link0_1.obj"/>
     <mesh file="franka_emika_panda/assets/link0_2.obj"/>
@@ -116,14 +118,16 @@
     <mesh file="franka_emika_panda/assets/link7_5.obj"/>
     <mesh file="franka_emika_panda/assets/link7_6.obj"/>
     <mesh file="franka_emika_panda/assets/link7_7.obj"/>
-    <mesh class="2f85" file="robotiq_2f85/assets/base_mount.stl"/>
+    <!-- <mesh class="2f85" file="robotiq_2f85/assets/base_mount.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/base.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/driver.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/coupler.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/follower.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/pad.stl"/>
     <mesh class="2f85" file="robotiq_2f85/assets/silicone_pad.stl"/>
-    <mesh class="2f85" file="robotiq_2f85/assets/spring_link.stl"/>
+    <mesh class="2f85" file="robotiq_2f85/assets/spring_link.stl"/> -->
+    <mesh file="franka_emika_panda/assets/ball_thrower.obj" scale="0.005 0.005 0.005" />
+
   </asset>
 
   <worldbody>
@@ -224,7 +228,15 @@
                     <geom mesh="link7_6" material="dark_grey" class="panda/visual"/>
                     <geom mesh="link7_7" material="white" class="panda/visual"/>
                     <geom mesh="link7_c" class="panda/collision"/>
-                    <body name="attachment" pos="0 0 0.107" quat="0.3826834 0 0 0.9238795">
+                    <body name="hand" pos="0.12 -0.12 0.107" quat="0 0.70710678 0.70710678 0">
+                      <camera name="handcam_depth" pos="-0.05 0 0" fovy="62" quat="0 1 -1 0"/>
+                      <camera name="handcam_rgb" pos="-0.05 0.015 0" fovy="42.5" quat="0 1 -1 0"/>
+                      <site name="pinch" pos="0 0 0.145"/>
+                      <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
+                      <geom mesh="ball_thrower" material="off_white" class="panda/visual" />
+                      <geom mesh="hand_c" class="panda/collision"/>
+                    </body>
+                    <!-- <body name="attachment" pos="0 0 0.107" quat="0.3826834 0 0 0.9238795">
                       <camera name="handcam_depth" pos="-0.05 0 0" fovy="62" quat="0 1 -1 0"/>
                       <camera name="handcam_rgb" pos="-0.05 0.015 0" fovy="42.5" quat="0 1 -1 0"/>
                       <site name="attachment_site" quat="0 0 0 1"/>
@@ -319,7 +331,7 @@
                           </body>
                         </body>
                       </body>
-                    </body>
+                    </body> -->
                   </body>
                 </body>
               </body>
@@ -330,28 +342,28 @@
     </body>
   </worldbody>
 
-  <contact>
-    <exclude body1="base" body2="left_driver"/>
-    <exclude body1="base" body2="right_driver"/>
-    <exclude body1="base" body2="left_spring_link"/>
-    <exclude body1="base" body2="right_spring_link"/>
-    <exclude body1="right_coupler" body2="right_follower"/>
-    <exclude body1="left_coupler" body2="left_follower"/>
-  </contact>
+    <!-- <contact>
+        <exclude body1="base" body2="left_driver"/>
+        <exclude body1="base" body2="right_driver"/>
+        <exclude body1="base" body2="left_spring_link"/>
+        <exclude body1="base" body2="right_spring_link"/>
+        <exclude body1="right_coupler" body2="right_follower"/>
+        <exclude body1="left_coupler" body2="left_follower"/>
+    </contact> -->
 
-  <tendon>
+  <!-- <tendon>
     <fixed name="split">
       <joint joint="right_driver_joint" coef="0.5"/>
       <joint joint="left_driver_joint" coef="0.5"/>
     </fixed>
-  </tendon>
+  </tendon> -->
 
-  <equality>
+  <!-- <equality>
     <connect anchor="0 0 0" body1="right_follower" body2="right_coupler" solimp="0.95 0.99 0.001" solref="0.005 1"/>
     <connect anchor="0 0 0" body1="left_follower" body2="left_coupler" solimp="0.95 0.99 0.001" solref="0.005 1"/>
     <joint joint1="right_driver_joint" joint2="left_driver_joint" polycoef="0 1 0 0 0" solimp="0.95 0.99 0.001"
       solref="0.005 1"/>
-  </equality>
+  </equality> -->
 
   <actuator>
     <motor class="panda" name="actuator1" joint="joint1" ctrlrange="-87 87"/>
@@ -361,8 +373,8 @@
     <motor class="panda" name="actuator5" joint="joint5" ctrlrange="-12 12"/>
     <motor class="panda" name="actuator6" joint="joint6" ctrlrange="-12 12"/>
     <motor class="panda" name="actuator7" joint="joint7" ctrlrange="-12 12"/>
-    <general class="2f85" name="fingers_actuator" tendon="split" forcerange="-5 5" ctrlrange="0 255"
-      gainprm="0.3137255 0 0" biasprm="0 -100 -10"/>
+    <!-- <general class="2f85" name="fingers_actuator" tendon="split" forcerange="-5 5" ctrlrange="0 255"
+      gainprm="0.3137255 0 0" biasprm="0 -100 -10"/> -->
   </actuator>
 
   <sensor>
@@ -390,10 +402,14 @@
     <torque name="panda/joint6_torque" site="joint6"/>
     <torque name="panda/joint7_torque" site="joint7"/>
 
-    <force name="panda/wrist_force" site="attachment_site"/>
+    <!-- <force name="panda/wrist_force" site="attachment_site"/> -->
 
-    <framepos name="2f85/pinch_pos" objtype="site" objname="pinch"/>
+    <framepos name="panda/hand_pos" objtype="body" objname="hand"/>
+    <framequat name="panda/hand_quat" objtype="body" objname="hand"/>
+    <framelinvel name="panda/hand_vel" objtype="body" objname="hand"/>
+
+    <!-- <framepos name="2f85/pinch_pos" objtype="site" objname="pinch"/>
     <framequat name="2f85/pinch_quat" objtype="site" objname="pinch"/>
-    <framelinvel name="2f85/pinch_vel" objtype="site" objname="pinch"/>
+    <framelinvel name="2f85/pinch_vel" objtype="site" objname="pinch"/> -->
   </sensor>
 </mujoco>
