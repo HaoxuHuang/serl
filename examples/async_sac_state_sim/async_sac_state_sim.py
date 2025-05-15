@@ -64,6 +64,7 @@ flags.DEFINE_boolean(
 flags.DEFINE_string("log_rlds_path", None, "Path to save RLDS logs.")
 flags.DEFINE_string("preload_rlds_path", None, "Path to preload RLDS data.")
 
+flags.DEFINE_integer("utd_ratio", 1, "utd_ratio.")
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
@@ -263,6 +264,7 @@ def main(_):
     # create env and load dataset
     if FLAGS.render:
         env = gym.make(FLAGS.env, render_mode="human")
+        # env = gym.make(FLAGS.env, render_mode="rgb_array")
     else:
         env = gym.make(FLAGS.env)
 

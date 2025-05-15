@@ -1,0 +1,30 @@
+<mujoco model="franka_basket">
+  <compiler angle="degree" meshdir="meshes/"/>
+  <default>
+    <geom friction="1 0.5 0.5"/>
+    <joint damping="1"/>
+  </default>
+  <worldbody>
+    <!-- 地面 -->
+    <geom name="floor" type="plane" pos="0 0 0" size="5 5 0.1" rgba="0.8 0.8 0.8 1"/>
+    <!-- Franka Panda 臂 -->
+    <include file="panda_hand.xml"/>
+    <!-- 篮筐 -->
+    <body name="hoop" pos="1.2 0 1.0">
+      <!-- 环状篮筐 -->
+      <geom type="cylinder" size="0.02 0.45" pos="0 0 0" euler="90 0 0"/>
+      <!-- 背板 -->
+      <geom type="box" size="0.5 0.02 0.5" pos="-0.5 0 0.5"/>
+    </body>
+    <!-- 篮球 -->
+    <body name="ball" pos="0.7 0 1.2">
+      <geom type="sphere" size="0.06" mass="0.62"/>
+      <joint type="free"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <!-- Panda 上的电机 -->
+    <motor joint="panda_joint1" ctrlrange="-87 87" gear="100"/>
+    <!-- …其余 6 个关节… -->
+  </actuator>
+</mujoco>
