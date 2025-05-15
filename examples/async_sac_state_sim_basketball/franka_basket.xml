@@ -58,7 +58,7 @@
     <mesh name="link5_c2" file="link5_collision_2.obj"/>
     <mesh name="link6_c" file="link6.stl"/>
     <mesh name="link7_c" file="link7.stl"/>
-    <mesh name="hand_c" file="hand.stl"/>
+    <mesh name="hand_c" file="ball_thrower.stl" scale="0.0005 0.0005 0.0005"/> 
 
     <!-- Visual meshes -->
     <mesh file="link0_0.obj"/>
@@ -110,13 +110,14 @@
     <mesh file="link7_5.obj"/>
     <mesh file="link7_6.obj"/>
     <mesh file="link7_7.obj"/>
-    <mesh file="hand_0.obj"/>
+    <mesh file="ball_thrower.obj" scale="0.005 0.005 0.005" />
+    <!-- <mesh file="hand_0.obj"/>
     <mesh file="hand_1.obj"/>
     <mesh file="hand_2.obj"/>
     <mesh file="hand_3.obj"/>
     <mesh file="hand_4.obj"/>
     <mesh file="finger_0.obj"/>
-    <mesh file="finger_1.obj"/>
+    <mesh file="finger_1.obj"/> -->
   </asset>
 
   <worldbody>
@@ -220,15 +221,16 @@
                     <geom mesh="link7_6" material="black" class="visual"/>
                     <geom mesh="link7_7" material="white" class="visual"/>
                     <geom mesh="link7_c" class="collision"/>
-                    <body name="hand" pos="0 0 0.107" quat="0.9238795 0 0 -0.3826834">
+                    <body name="hand" pos="0.12 -0.12 0.107" quat="0 0.70710678 0.70710678 0">
                       <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
-                      <geom mesh="hand_0" material="off_white" class="visual"/>
+                      <!-- <geom mesh="hand_0" material="off_white" class="visual"/>
                       <geom mesh="hand_1" material="black" class="visual"/>
                       <geom mesh="hand_2" material="black" class="visual"/>
                       <geom mesh="hand_3" material="white" class="visual"/>
-                      <geom mesh="hand_4" material="off_white" class="visual"/>
+                      <geom mesh="hand_4" material="off_white" class="visual"/> -->
+                      <geom mesh="ball_thrower" material="off_white" class="visual" />
                       <geom mesh="hand_c" class="collision"/>
-                      <body name="left_finger" pos="0 0 0.0584">
+                      <!-- <body name="left_finger" pos="0 0 0.0584">
                         <inertial mass="0.015" pos="0 0 0" diaginertia="2.375e-6 2.375e-6 7.5e-7"/>
                         <joint name="finger_joint1" class="finger"/>
                         <geom mesh="finger_0" material="off_white" class="visual"/>
@@ -251,7 +253,7 @@
                         <geom class="fingertip_pad_collision_3"/>
                         <geom class="fingertip_pad_collision_4"/>
                         <geom class="fingertip_pad_collision_5"/>
-                      </body>
+                      </body> -->
                     </body>
                   </body>
                 </body>
@@ -263,16 +265,16 @@
     </body>
   </worldbody>
 
-  <tendon>
+  <!-- <tendon>
     <fixed name="split">
       <joint joint="finger_joint1" coef="0.5"/>
       <joint joint="finger_joint2" coef="0.5"/>
     </fixed>
-  </tendon>
+  </tendon> -->
 
-  <equality>
+  <!-- <equality>
     <joint joint1="finger_joint1" joint2="finger_joint2" solimp="0.95 0.99 0.001" solref="0.005 1"/>
-  </equality>
+  </equality> -->
 
   <actuator>
     <motor class="panda" name="actuator1" joint="joint1" forcerange="-87 87"/>
