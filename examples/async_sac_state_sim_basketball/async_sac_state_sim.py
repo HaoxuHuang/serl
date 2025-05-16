@@ -72,6 +72,7 @@ flags.DEFINE_boolean("learner", False, "Is this a learner or a trainer.")
 flags.DEFINE_boolean("actor", False, "Is this a learner or a trainer.")
 flags.DEFINE_boolean("render", False, "Render the environment.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
+flags.DEFINE_integer("port", 5488, "Port number")
 flags.DEFINE_integer("checkpoint_period", 0, "Period to save checkpoints.")
 flags.DEFINE_string("checkpoint_path", None, "Path to save checkpoints.")
 
@@ -99,7 +100,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     client = TrainerClient(
         "actor_env",
         FLAGS.ip,
-        make_trainer_config(),
+        make_trainer_config(FLAGS.port, FLAGS.port + 1),
         data_store,
         wait_for_server=True,
     )
@@ -210,7 +211,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         return {}  # not expecting a response
 
     # Create server
-    server = TrainerServer(make_trainer_config(),
+    server = TrainerServer(make_trainer_config(FLAGS.port, FLAGS.port + 1),
                            request_callback=stats_callback)
     server.register_data_store("actor_env", replay_buffer)
     server.start(threaded=True)
