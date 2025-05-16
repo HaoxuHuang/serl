@@ -137,8 +137,8 @@ class BasketEnv(MujocoGymEnv):
             )
 
         self.action_space = gym.spaces.Box(
-            low=np.asarray([-1.0] * ),
-            high=np.asarray([1.0, 1.0, 1.0, 1.0]),
+            low=np.asarray([-1.0] * 4),
+            high=np.asarray([1.0] * 4),
             dtype=np.float32,
         )
 
@@ -222,17 +222,8 @@ class BasketEnv(MujocoGymEnv):
             mujoco.mj_step(self._model, self._data)
 
         obs = self._compute_observation()
-        # rew = self._compute_reward()
-        terminated = self.time_limit_exceeded()
-        rew = 0
-        contact = self._data.contact
-        for i in range(len(contact.geom1)):
-            if (contact.geom1[i] == self.block_id and contact.geom2[i] == self.floor_id) or (contact.geom1[i] == self.floor_id and contact.geom2[i] == self.block_id):
-                terminated = True
-                block_pos = self._data.sensor("block_pos").data[:2]
-                dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
-                rew = np.exp(-20 * dist)
-                # print(rew)
+        rew = self._compute_reward()
+        terminated = self._compute_terminated()
         # print(obs)
         return obs, rew, terminated, False, {}
 
@@ -300,13 +291,29 @@ class BasketEnv(MujocoGymEnv):
         # r_lift = np.clip(r_lift, 0.0, 1.0)
         # rew = 0.3 * r_close + 0.7 * r_lift
         # return rew
-        assert 0, "You should not use _compute_reward()."
+        
+        contact = self._data.contact
+        for i in range(len(contact.geom1)):
+            if (contact.geom1[i] == self.block_id and contact.geom2[i] == self.floor_id) or (contact.geom1[i] == self.floor_id and contact.geom2[i] == self.block_id):
+                block_pos = self._data.sensor("block_pos").data[:2]
+                dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
+                rew = np.exp(-20 * dist)
+                # print(rew)
+                return rew
+        return 0.
+    
+    def _compute_terminated(self) -> bool:
+        contact = self._data.contact
+        for i in range(len(contact.geom1)):
+            if (contact.geom1[i] == self.block_id and contact.geom2[i] == self.floor_id) or (contact.geom1[i] == self.floor_id and contact.geom2[i] == self.block_id):
+                return True
+        return self.time_limit_exceeded()
 
 
 if __name__ == "__main__":
     env = BasketEnv(render_mode="human")
     env.reset()
-    for i in range(100):
+    for i in range(1000):
         obs, rew, terminated, _, _ = env.step(np.random.uniform(-1, 1, 4))
         env.render()
         if terminated:
