@@ -123,45 +123,52 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     # training loop
     timer = Timer()
     running_return = 0.0
+    count = 0
     for step in tqdm.tqdm(range(FLAGS.max_steps), dynamic_ncols=True):
         timer.tick("total")
 
-        with timer.context("sample_actions"):
-            if step < FLAGS.random_steps:
-                actions = env.action_space.sample()
-            else:
-                sampling_rng, key = jax.random.split(sampling_rng)
-                actions = agent.sample_actions(
-                    observations=jax.device_put(obs),
-                    seed=key,
-                    deterministic=False,
+        if count > 0:
+            count -= 1
+        else:
+
+            with timer.context("sample_actions"):
+                if step < FLAGS.random_steps:
+                    actions = env.action_space.sample()
+                else:
+                    sampling_rng, key = jax.random.split(sampling_rng)
+                    actions = agent.sample_actions(
+                        observations=jax.device_put(obs),
+                        seed=key,
+                        deterministic=False,
+                    )
+                    actions = np.asarray(jax.device_get(actions))
+
+            # Step environment
+            with timer.context("step_env"):
+
+                next_obs, reward, done, truncated, info = env.step(actions)
+                next_obs = np.asarray(next_obs, dtype=np.float32)
+                reward = np.asarray(reward, dtype=np.float32)
+
+                running_return += reward
+
+                data_store.insert(
+                    dict(
+                        observations=obs,
+                        actions=actions,
+                        next_observations=next_obs,
+                        rewards=reward,
+                        masks=1.0 - done,
+                        dones=done or truncated,
+                    )
                 )
-                actions = np.asarray(jax.device_get(actions))
 
-        # Step environment
-        with timer.context("step_env"):
-
-            next_obs, reward, done, truncated, info = env.step(actions)
-            next_obs = np.asarray(next_obs, dtype=np.float32)
-            reward = np.asarray(reward, dtype=np.float32)
-
-            running_return += reward
-
-            data_store.insert(
-                dict(
-                    observations=obs,
-                    actions=actions,
-                    next_observations=next_obs,
-                    rewards=reward,
-                    masks=1.0 - done,
-                    dones=done or truncated,
-                )
-            )
-
-            obs = next_obs
-            if done or truncated:
-                running_return = 0.0
-                obs, _ = env.reset()
+                obs = next_obs
+                if done or truncated:
+                    running_return = 0.0
+                    obs, _ = env.reset()
+                    # count = 250
+                    time.sleep(5)
 
         if FLAGS.render:
             env.render()
@@ -265,7 +272,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         if FLAGS.checkpoint_period and update_steps % FLAGS.checkpoint_period == 0:
             assert FLAGS.checkpoint_path is not None
             checkpoints.save_checkpoint(
-                FLAGS.checkpoint_path, agent.state, step=update_steps, keep=20
+                FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
             )
 
         pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar

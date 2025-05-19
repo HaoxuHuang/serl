@@ -28,7 +28,9 @@ class BasketEnv(MujocoGymEnv):
 
     def __init__(
         self,
-        action_scale: np.ndarray = np.asarray([0.1, 1]),
+        # action_scale: np.ndarray = np.asarray([0.1, 1]),
+        action_scale: float = 1,
+        angle_penalty: float = 0.00005,
         seed: int = 0,
         control_dt: float = 0.02,
         physics_dt: float = 0.002,
@@ -38,6 +40,7 @@ class BasketEnv(MujocoGymEnv):
         image_obs: bool = False,
     ):
         self._action_scale = action_scale
+        self._angle_penalty = angle_penalty
 
         super().__init__(
             xml_path=_XML_PATH,
@@ -137,8 +140,8 @@ class BasketEnv(MujocoGymEnv):
             )
 
         self.action_space = gym.spaces.Box(
-            low=np.asarray([-1.0] * 4),
-            high=np.asarray([1.0] * 4),
+            low=np.asarray([-1.0] * 7),
+            high=np.asarray([1.0] * 7),
             dtype=np.float32,
         )
 
@@ -193,13 +196,13 @@ class BasketEnv(MujocoGymEnv):
             truncated: bool,
             info: dict[str, Any]
         """
-        x, y, z, grasp = action
+        # x, y, z, grasp = action
 
-        # Set the mocap position.
-        pos = self._data.mocap_pos[0].copy()
-        dpos = np.asarray([x, y, z]) * self._action_scale[0]
-        npos = np.clip(pos + dpos, *_CARTESIAN_BOUNDS)
-        self._data.mocap_pos[0] = npos
+        # # Set the mocap position.
+        # pos = self._data.mocap_pos[0].copy()
+        # dpos = np.asarray([x, y, z]) * self._action_scale[0]
+        # npos = np.clip(pos + dpos, *_CARTESIAN_BOUNDS)
+        # self._data.mocap_pos[0] = npos
 
         # Set gripper grasp.
         # g = self._data.ctrl[self._ctrl_id] / 255
@@ -207,24 +210,32 @@ class BasketEnv(MujocoGymEnv):
         # ng = np.clip(g + dg, 0.0, 1.0)
         # self._data.ctrl[self._ctrl_id] = ng * 255
 
+        # for _ in range(self._n_substeps):
+        #     tau = opspace(
+        #         model=self._model,
+        #         data=self._data,
+        #         site_id=self._pinch_site_id,
+        #         dof_ids=self._panda_dof_ids,
+        #         pos=self._data.mocap_pos[0],
+        #         ori=self._data.mocap_quat[0],
+        #         joint=_PANDA_HOME,
+        #         gravity_comp=True,
+        #     )
+        #     self._data.ctrl[self._panda_ctrl_ids] = tau
+        #     mujoco.mj_step(self._model, self._data)
+
         for _ in range(self._n_substeps):
-            tau = opspace(
-                model=self._model,
-                data=self._data,
-                site_id=self._pinch_site_id,
-                dof_ids=self._panda_dof_ids,
-                pos=self._data.mocap_pos[0],
-                ori=self._data.mocap_quat[0],
-                joint=_PANDA_HOME,
-                gravity_comp=True,
-            )
-            self._data.ctrl[self._panda_ctrl_ids] = tau
+        # for _ in range(1):
+            pos = np.stack(
+                [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
+            ).ravel()
+            npos = pos + action * self._action_scale / self._n_substeps
+            self._data.ctrl[self._panda_ctrl_ids] = npos
             mujoco.mj_step(self._model, self._data)
 
         obs = self._compute_observation()
         rew = self._compute_reward()
         terminated = self._compute_terminated()
-        # print(obs)
         return obs, rew, terminated, False, {}
 
     def render(self):
@@ -292,15 +303,21 @@ class BasketEnv(MujocoGymEnv):
         # rew = 0.3 * r_close + 0.7 * r_lift
         # return rew
         
+        pos = np.stack(
+            [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
+        ).ravel()
+        rew = -self._angle_penalty * (np.abs(pos - _PANDA_HOME)).sum()
         contact = self._data.contact
         for i in range(len(contact.geom1)):
             if (contact.geom1[i] == self.block_id and contact.geom2[i] == self.floor_id) or (contact.geom1[i] == self.floor_id and contact.geom2[i] == self.block_id):
                 block_pos = self._data.sensor("block_pos").data[:2]
-                dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
-                rew = np.exp(-20 * dist)
+                # dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
+                dist = np.linalg.norm(block_pos - self.circle_o)
+                rew += np.exp(-dist)
                 # print(rew)
                 return rew
-        return 0.
+        # print(rew)
+        return rew
     
     def _compute_terminated(self) -> bool:
         contact = self._data.contact
@@ -313,9 +330,14 @@ class BasketEnv(MujocoGymEnv):
 if __name__ == "__main__":
     env = BasketEnv(render_mode="human")
     env.reset()
-    for i in range(1000):
-        obs, rew, terminated, _, _ = env.step(np.random.uniform(-1, 1, 4))
+    for i in range(5000):
+        # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
+        # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
+        obs, rew, terminated, _, _ = env.step(np.random.uniform(1, 1, 7))
         env.render()
         if terminated:
             env.reset()
+    # for i in range(500):
+    #     obs, rew, terminated, _, _ = env.step(np.random.uniform(-3.14, -3.14, 7))
+    #     env.render()
     env.close()
