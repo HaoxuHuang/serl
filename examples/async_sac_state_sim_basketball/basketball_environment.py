@@ -30,7 +30,7 @@ class BasketEnv(MujocoGymEnv):
         self,
         # action_scale: np.ndarray = np.asarray([0.1, 1]),
         action_scale: float = 1,
-        angle_penalty: float = 0.00005,
+        angle_penalty: float = 0.00003,
         seed: int = 0,
         control_dt: float = 0.02,
         physics_dt: float = 0.002,
@@ -171,7 +171,7 @@ class BasketEnv(MujocoGymEnv):
 
         # Sample a new block position.
         block_xy = np.random.uniform(*_SAMPLING_BOUNDS)
-        self._data.jnt("block").qpos[:3] = (0.48670042, 0.00820504, 0.627814)
+        self._data.jnt("block").qpos[:3] = (0.48670042, 0.00820504, 0.610814)
         mujoco.mj_forward(self._model, self._data)
 
         # Cache the initial block height.
@@ -334,6 +334,7 @@ if __name__ == "__main__":
         # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
         # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
         obs, rew, terminated, _, _ = env.step(np.random.uniform(1, 1, 7))
+        env.reset()
         env.render()
         if terminated:
             env.reset()
