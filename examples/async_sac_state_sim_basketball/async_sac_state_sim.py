@@ -212,6 +212,11 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
     """
     The learner loop, which runs when "--learner" is set to True.
     """
+    if FLAGS.load_checkpoint != None:
+        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
+        params = params["params"]
+        agent = agent.replace(state=agent.state.replace(params=params))
+
     # set up wandb and logging
     wandb_logger = make_wandb_logger(
         project="serl_dev",
@@ -248,10 +253,6 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         time.sleep(1)
     pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
     pbar.close()
-
-    if FLAGS.load_checkpoint != None:
-        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint)
-        agent = agent.replace(state=agent.state.replace(params=params))
 
     # send the initial network to the actor
     server.publish_network(agent.state.params)
