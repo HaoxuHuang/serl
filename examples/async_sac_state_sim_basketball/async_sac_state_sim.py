@@ -124,7 +124,6 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     client.recv_network_callback(update_params)
 
     eval_env = gym.make(FLAGS.env,
-                       render_mode="human",
                        action_scale=FLAGS.action_scale,
                        angle_penalty=FLAGS.angle_penalty,
                        energy_penalty=FLAGS.energy_penalty,
