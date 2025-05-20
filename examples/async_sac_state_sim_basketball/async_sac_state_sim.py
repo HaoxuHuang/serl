@@ -123,7 +123,15 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
 
     client.recv_network_callback(update_params)
 
-    eval_env = gym.make(FLAGS.env)
+    eval_env = gym.make(FLAGS.env,
+                       render_mode="human",
+                       action_scale=FLAGS.action_scale,
+                       angle_penalty=FLAGS.angle_penalty,
+                       energy_penalty=FLAGS.energy_penalty,
+                       seed=FLAGS.seed,
+                       control_dt=FLAGS.control_dt,
+                       physics_dt=FLAGS.physics_dt,
+                       time_limit=FLAGS.time_limit)
     if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
         eval_env = gym.wrappers.FlattenObservation(eval_env)
     eval_env = RecordEpisodeStatistics(eval_env)

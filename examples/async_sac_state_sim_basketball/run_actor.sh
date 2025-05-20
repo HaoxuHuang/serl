@@ -7,5 +7,5 @@ python async_sac_state_sim.py "$@" \
     --seed 0 \
     --random_steps 1000 \
     --actor_steps 40000 \
-    --sleep_time 5
+    --sleep_time 5 \
     # --debug
