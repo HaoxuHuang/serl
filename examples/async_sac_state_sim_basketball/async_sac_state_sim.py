@@ -76,6 +76,7 @@ flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
 flags.DEFINE_integer("port", 5488, "Port number")
 flags.DEFINE_integer("checkpoint_period", 0, "Period to save checkpoints.")
 flags.DEFINE_string("checkpoint_path", None, "Path to save checkpoints.")
+flags.DEFINE_string("load_checkpoint", None, "Path to load checkpoints.")
 
 flags.DEFINE_boolean(
     "debug", False, "Debug mode."
@@ -85,6 +86,7 @@ flags.DEFINE_string("log_rlds_path", None, "Path to save RLDS logs.")
 flags.DEFINE_string("preload_rlds_path", None, "Path to preload RLDS data.")
 
 flags.DEFINE_integer("utd_ratio", 1, "utd_ratio.")
+flags.DEFINE_integer("sleep_time", 0, "Sleep time.")
 
 
 def print_green(x):
@@ -124,52 +126,46 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     # training loop
     timer = Timer()
     running_return = 0.0
-    count = 0
     for step in tqdm.tqdm(range(FLAGS.actor_steps), dynamic_ncols=True):
         timer.tick("total")
 
-        if count > 0:
-            count -= 1
-        else:
-
-            with timer.context("sample_actions"):
-                if step < FLAGS.random_steps:
-                    actions = env.action_space.sample()
-                else:
-                    sampling_rng, key = jax.random.split(sampling_rng)
-                    actions = agent.sample_actions(
-                        observations=jax.device_put(obs),
-                        seed=key,
-                        deterministic=False,
-                    )
-                    actions = np.asarray(jax.device_get(actions))
-
-            # Step environment
-            with timer.context("step_env"):
-
-                next_obs, reward, done, truncated, info = env.step(actions)
-                next_obs = np.asarray(next_obs, dtype=np.float32)
-                reward = np.asarray(reward, dtype=np.float32)
-
-                running_return += reward
-
-                data_store.insert(
-                    dict(
-                        observations=obs,
-                        actions=actions,
-                        next_observations=next_obs,
-                        rewards=reward,
-                        masks=1.0 - done,
-                        dones=done or truncated,
-                    )
+        with timer.context("sample_actions"):
+            if step < FLAGS.random_steps:
+                actions = env.action_space.sample()
+            else:
+                sampling_rng, key = jax.random.split(sampling_rng)
+                actions = agent.sample_actions(
+                    observations=jax.device_put(obs),
+                    seed=key,
+                    deterministic=False,
                 )
+                actions = np.asarray(jax.device_get(actions))
 
-                obs = next_obs
-                if done or truncated:
-                    running_return = 0.0
-                    obs, _ = env.reset()
-                    # count = 250
-                    time.sleep(5)
+        # Step environment
+        with timer.context("step_env"):
+
+            next_obs, reward, done, truncated, info = env.step(actions)
+            next_obs = np.asarray(next_obs, dtype=np.float32)
+            reward = np.asarray(reward, dtype=np.float32)
+
+            running_return += reward
+
+            data_store.insert(
+                dict(
+                    observations=obs,
+                    actions=actions,
+                    next_observations=next_obs,
+                    rewards=reward,
+                    masks=1.0 - done,
+                    dones=done or truncated,
+                )
+            )
+
+            obs = next_obs
+            if done or truncated:
+                running_return = 0.0
+                obs, _ = env.reset()
+                time.sleep(FLAGS.sleep_time)
 
         if FLAGS.render:
             env.render()
@@ -237,6 +233,10 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         time.sleep(1)
     pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
     pbar.close()
+
+    if FLAGS.load_checkpoint != None:
+        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint)
+        agent = agent.replace(state=agent.state.replace(params=params))
 
     # send the initial network to the actor
     server.publish_network(agent.state.params)

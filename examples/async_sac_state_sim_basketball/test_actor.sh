@@ -5,7 +5,6 @@ python async_sac_state_sim.py "$@" \
     --render \
     --exp_name=serl_dev_sim_test \
     --seed 0 \
-    --random_steps 1000 \
+    --random_steps 10 \
     --actor_steps 40000 \
-    --sleep_time 5
-    # --debug
+    --debug
