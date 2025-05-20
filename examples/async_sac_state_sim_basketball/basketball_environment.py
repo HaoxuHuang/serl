@@ -29,8 +29,9 @@ class BasketEnv(MujocoGymEnv):
     def __init__(
         self,
         # action_scale: np.ndarray = np.asarray([0.1, 1]),
-        action_scale: float = 1,
+        action_scale: float = 0.05,
         angle_penalty: float = 0.00003,
+        energy_penalty: float = 0.0001,
         seed: int = 0,
         control_dt: float = 0.02,
         physics_dt: float = 0.002,
@@ -41,6 +42,7 @@ class BasketEnv(MujocoGymEnv):
     ):
         self._action_scale = action_scale
         self._angle_penalty = angle_penalty
+        self._energy_penalty = energy_penalty
 
         super().__init__(
             xml_path=_XML_PATH,
@@ -170,13 +172,13 @@ class BasketEnv(MujocoGymEnv):
         self._data.mocap_pos[0] = tcp_pos
 
         # Sample a new block position.
-        block_xy = np.random.uniform(*_SAMPLING_BOUNDS)
+        # block_xy = np.random.uniform(*_SAMPLING_BOUNDS)
         self._data.jnt("block").qpos[:3] = (0.48670042, 0.00820504, 0.610814)
         mujoco.mj_forward(self._model, self._data)
 
         # Cache the initial block height.
-        self._z_init = self._data.sensor("block_pos").data[2]
-        self._z_success = self._z_init + 0.2
+        # self._z_init = self._data.sensor("block_pos").data[2]
+        # self._z_success = self._z_init + 0.2
 
         obs = self._compute_observation()
         return obs, {}
@@ -187,7 +189,7 @@ class BasketEnv(MujocoGymEnv):
         """
         take a step in the environment.
         Params:
-            action: np.ndarray
+            action: np.ndarray delta joint position
 
         Returns:
             observation: dict[str, np.ndarray],
@@ -234,7 +236,7 @@ class BasketEnv(MujocoGymEnv):
             mujoco.mj_step(self._model, self._data)
 
         obs = self._compute_observation()
-        rew = self._compute_reward()
+        rew = self._compute_reward(action)
         terminated = self._compute_terminated()
         return obs, rew, terminated, False, {}
 
@@ -293,7 +295,7 @@ class BasketEnv(MujocoGymEnv):
 
         return obs
 
-    def _compute_reward(self) -> float:
+    def _compute_reward(self, action) -> float:
         # block_pos = self._data.sensor("block_pos").data
         # tcp_pos = self._data.sensor("panda/hand_pos").data
         # dist = np.linalg.norm(block_pos - tcp_pos)
@@ -307,6 +309,7 @@ class BasketEnv(MujocoGymEnv):
             [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
         ).ravel()
         rew = -self._angle_penalty * (np.abs(pos - _PANDA_HOME)).sum()
+        rew += -self._energy_penalty * np.linalg.norm(action)
         contact = self._data.contact
         for i in range(len(contact.geom1)):
             if (contact.geom1[i] == self.block_id and contact.geom2[i] == self.floor_id) or (contact.geom1[i] == self.floor_id and contact.geom2[i] == self.block_id):
