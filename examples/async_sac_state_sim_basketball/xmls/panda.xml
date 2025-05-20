@@ -366,13 +366,13 @@
   </equality> -->
 
   <actuator>
-    <position class="panda" name="actuator1" joint="joint1" ctrlrange="-87 87" kp="1450"/>
-    <position class="panda" name="actuator2" joint="joint2" ctrlrange="-87 87" kp="1450"/>
-    <position class="panda" name="actuator3" joint="joint3" ctrlrange="-87 87" kp="1450"/>
-    <position class="panda" name="actuator4" joint="joint4" ctrlrange="-87 87" kp="1450"/>
-    <position class="panda" name="actuator5" joint="joint5" ctrlrange="-12 12" kp="200"/>
-    <position class="panda" name="actuator6" joint="joint6" ctrlrange="-12 12" kp="200"/>
-    <position class="panda" name="actuator7" joint="joint7" ctrlrange="-12 12" kp="200"/>
+    <motor class="panda" name="actuator1" joint="joint1" ctrlrange="-87 87" />
+    <motor class="panda" name="actuator2" joint="joint2" ctrlrange="-87 87" />
+    <motor class="panda" name="actuator3" joint="joint3" ctrlrange="-87 87" />
+    <motor class="panda" name="actuator4" joint="joint4" ctrlrange="-87 87" />
+    <motor class="panda" name="actuator5" joint="joint5" ctrlrange="-12 12" />
+    <motor class="panda" name="actuator6" joint="joint6" ctrlrange="-12 12" />
+    <motor class="panda" name="actuator7" joint="joint7" ctrlrange="-12 12" />
     <!-- <general class="2f85" name="fingers_actuator" tendon="split" forcerange="-5 5" ctrlrange="0 255"
       gainprm="0.3137255 0 0" biasprm="0 -100 -10"/> -->
   </actuator>

@@ -13,7 +13,7 @@ except ImportError as e:
 else:
     MUJOCO_PY_IMPORT_ERROR = None
 
-from franka_sim.controllers import opspace
+from franka_sim.controllers import jointspace
 from franka_sim.mujoco_gym_env import GymRenderingSpec, MujocoGymEnv
 
 _HERE = Path(__file__).parent
@@ -206,34 +206,33 @@ class BasketEnv(MujocoGymEnv):
         # npos = np.clip(pos + dpos, *_CARTESIAN_BOUNDS)
         # self._data.mocap_pos[0] = npos
 
+
         # Set gripper grasp.
         # g = self._data.ctrl[self._ctrl_id] / 255
         # dg = grasp * self._action_scale[1]
         # ng = np.clip(g + dg, 0.0, 1.0)
         # self._data.ctrl[self._ctrl_id] = ng * 255
+        pos = np.stack(
+            [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
+            ).ravel()
+        for _ in range(self._n_substeps):
+            tau = jointspace(
+                model=self._model,
+                data=self._data,
+                dof_ids=self._panda_dof_ids,
+                joint=pos + action * self._action_scale,
+            )
+            self._data.ctrl[self._panda_ctrl_ids] = tau
+            mujoco.mj_step(self._model, self._data)
 
         # for _ in range(self._n_substeps):
-        #     tau = opspace(
-        #         model=self._model,
-        #         data=self._data,
-        #         site_id=self._pinch_site_id,
-        #         dof_ids=self._panda_dof_ids,
-        #         pos=self._data.mocap_pos[0],
-        #         ori=self._data.mocap_quat[0],
-        #         joint=_PANDA_HOME,
-        #         gravity_comp=True,
-        #     )
-        #     self._data.ctrl[self._panda_ctrl_ids] = tau
+        # # for _ in range(1):
+        #     pos = np.stack(
+        #         [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
+        #     ).ravel()
+        #     npos = pos + action * self._action_scale / self._n_substeps
+        #     self._data.ctrl[self._panda_ctrl_ids] = npos
         #     mujoco.mj_step(self._model, self._data)
-
-        for _ in range(self._n_substeps):
-        # for _ in range(1):
-            pos = np.stack(
-                [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
-            ).ravel()
-            npos = pos + action * self._action_scale / self._n_substeps
-            self._data.ctrl[self._panda_ctrl_ids] = npos
-            mujoco.mj_step(self._model, self._data)
 
         obs = self._compute_observation()
         rew = self._compute_reward(action)
@@ -333,15 +332,27 @@ class BasketEnv(MujocoGymEnv):
 if __name__ == "__main__":
     env = BasketEnv(render_mode="human")
     env.reset()
-    for i in range(5000):
+    last_obs = None
+    errors = []
+    for i in range(500):
         # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
         # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
-        obs, rew, terminated, _, _ = env.step(np.random.uniform(1, 1, 7))
-        env.reset()
+        action = np.ones(7) * np.pi
+        obs, rew, terminated, _, _ = env.step(action)
+        # env.reset()
         env.render()
-        if terminated:
-            env.reset()
+        if last_obs is not None:
+            error = last_obs['state']['panda/joint_pos'] + action * env._action_scale - obs['state']['panda/joint_pos']
+            errors.append(error)
+        last_obs = obs
+        # if terminated:
+        #     env.reset()
     # for i in range(500):
     #     obs, rew, terminated, _, _ = env.step(np.random.uniform(-3.14, -3.14, 7))
     #     env.render()
     env.close()
+
+    import matplotlib.pyplot as plt
+    for i in range(7):
+        plt.plot([e[i] for e in errors])
+    plt.show()
