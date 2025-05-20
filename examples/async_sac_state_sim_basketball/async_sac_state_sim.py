@@ -88,6 +88,14 @@ flags.DEFINE_string("preload_rlds_path", None, "Path to preload RLDS data.")
 flags.DEFINE_integer("utd_ratio", 1, "utd_ratio.")
 flags.DEFINE_integer("sleep_time", 0, "Sleep time.")
 
+flags.DEFINE_float("action_scale", 0.2, "Scale applied to agent actions.")
+flags.DEFINE_float("angle_penalty", 1e-5, "Penalty coefficient for joint angles.")
+flags.DEFINE_float("energy_penalty", 1e-4, "Penalty coefficient for energy usage.")
+# flags.DEFINE_integer("seed", 0, "Random seed for environment/simulation.")
+flags.DEFINE_float("control_dt", 0.02, "Control timestep (seconds).")
+flags.DEFINE_float("physics_dt", 0.002, "Physics simulation timestep (seconds).")
+flags.DEFINE_float("time_limit", 10.0, "Maximum episode duration (seconds).")
+
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
@@ -294,9 +302,25 @@ def main(_):
 
     # create env and load dataset
     if FLAGS.render:
-        env = gym.make(FLAGS.env, render_mode="human")
+        env = gym.make(FLAGS.env,
+                       render_mode="human",
+                       action_scale=FLAGS.action_scale,
+                       angle_penalty=FLAGS.angle_penalty,
+                       energy_penalty=FLAGS.energy_penalty,
+                       seed=FLAGS.seed,
+                       control_dt=FLAGS.control_dt,
+                       physics_dt=FLAGS.physics_dt,
+                       time_limit=FLAGS.time_limit)
+
     else:
-        env = gym.make(FLAGS.env)
+        env = gym.make(FLAGS.env,
+                       action_scale=FLAGS.action_scale,
+                       angle_penalty=FLAGS.angle_penalty,
+                       energy_penalty=FLAGS.energy_penalty,
+                       seed=FLAGS.seed,
+                       control_dt=FLAGS.control_dt,
+                       physics_dt=FLAGS.physics_dt,
+                       time_limit=FLAGS.time_limit)
 
     if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
         env = gym.wrappers.FlattenObservation(env)

@@ -29,8 +29,8 @@ class BasketEnv(MujocoGymEnv):
     def __init__(
         self,
         # action_scale: np.ndarray = np.asarray([0.1, 1]),
-        action_scale: float = 0.05,
-        angle_penalty: float = 0.00003,
+        action_scale: float = 0.2,
+        angle_penalty: float = 0.00001,
         energy_penalty: float = 0.0001,
         seed: int = 0,
         control_dt: float = 0.02,
@@ -206,7 +206,6 @@ class BasketEnv(MujocoGymEnv):
         # npos = np.clip(pos + dpos, *_CARTESIAN_BOUNDS)
         # self._data.mocap_pos[0] = npos
 
-
         # Set gripper grasp.
         # g = self._data.ctrl[self._ctrl_id] / 255
         # dg = grasp * self._action_scale[1]
@@ -214,7 +213,7 @@ class BasketEnv(MujocoGymEnv):
         # self._data.ctrl[self._ctrl_id] = ng * 255
         pos = np.stack(
             [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
-            ).ravel()
+        ).ravel()
         for _ in range(self._n_substeps):
             tau = jointspace(
                 model=self._model,
@@ -303,7 +302,7 @@ class BasketEnv(MujocoGymEnv):
         # r_lift = np.clip(r_lift, 0.0, 1.0)
         # rew = 0.3 * r_close + 0.7 * r_lift
         # return rew
-        
+
         pos = np.stack(
             [self._data.sensor(f"panda/joint{i}_pos").data for i in range(1, 8)],
         ).ravel()
@@ -320,7 +319,7 @@ class BasketEnv(MujocoGymEnv):
                 return rew
         # print(rew)
         return rew
-    
+
     def _compute_terminated(self) -> bool:
         contact = self._data.contact
         for i in range(len(contact.geom1)):
@@ -342,7 +341,8 @@ if __name__ == "__main__":
         # env.reset()
         env.render()
         if last_obs is not None:
-            error = last_obs['state']['panda/joint_pos'] + action * env._action_scale - obs['state']['panda/joint_pos']
+            error = last_obs['state']['panda/joint_pos'] + action * \
+                env._action_scale - obs['state']['panda/joint_pos']
             errors.append(error)
         last_obs = obs
         # if terminated:
