@@ -51,7 +51,8 @@ flags.DEFINE_bool("save_model", False, "Whether to save model.")
 flags.DEFINE_integer("batch_size", 256, "Batch size.")
 flags.DEFINE_integer("critic_actor_ratio", 8, "critic to actor update ratio.")
 
-flags.DEFINE_integer("max_steps", 1000000, "Maximum number of training steps.")
+flags.DEFINE_integer("actor_steps", 1000000, "Maximum number of actor steps.")
+flags.DEFINE_integer("learner_steps", 1000000, "Maximum number of learner steps.")
 flags.DEFINE_integer("replay_buffer_capacity", 1000000,
                      "Replay buffer capacity.")
 
@@ -124,7 +125,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     timer = Timer()
     running_return = 0.0
     count = 0
-    for step in tqdm.tqdm(range(FLAGS.max_steps), dynamic_ncols=True):
+    for step in tqdm.tqdm(range(FLAGS.actor_steps), dynamic_ncols=True):
         timer.tick("total")
 
         if count > 0:
@@ -251,7 +252,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         desc="replay buffer",
     )
 
-    for step in tqdm.tqdm(range(FLAGS.max_steps), dynamic_ncols=True, desc="learner"):
+    for step in tqdm.tqdm(range(FLAGS.learner_steps), dynamic_ncols=True, desc="learner"):
         # Train the networks
         with timer.context("sample_replay_buffer"):
             batch = next(replay_iterator)
