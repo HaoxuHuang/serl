@@ -180,12 +180,13 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
             obs = next_obs
             if done or truncated:
                 running_return = 0.0
-                obs, _ = env.reset()
                 if FLAGS.debug:
                     env.plot_rewards()
-                    env.plot_observation_component(['state', 'tcp_pose'])
+                    env.plot_observation_component()
+                    env.plot_actions()
                 else:
                     time.sleep(FLAGS.sleep_time)
+                obs, _ = env.reset()
 
         if FLAGS.render:
             env.render()
