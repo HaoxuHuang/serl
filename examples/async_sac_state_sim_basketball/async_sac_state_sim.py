@@ -36,6 +36,7 @@ register(
     entry_point="basketball_environment:BasketEnv",
     max_episode_steps=100,
 )
+from basketball_env_monitor import BasketMonitorWrapper
 
 FLAGS = flags.FLAGS
 
@@ -180,7 +181,11 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
             if done or truncated:
                 running_return = 0.0
                 obs, _ = env.reset()
-                time.sleep(FLAGS.sleep_time)
+                if FLAGS.debug:
+                    env.plot_rewards()
+                    env.plot_observation_component(['state', 'tcp_pose'])
+                else:
+                    time.sleep(FLAGS.sleep_time)
 
         if FLAGS.render:
             env.render()
@@ -332,6 +337,9 @@ def main(_):
 
     if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
         env = gym.wrappers.FlattenObservation(env)
+
+    if FLAGS.debug:
+        env = BasketMonitorWrapper(env)
 
     rng, sampling_rng = jax.random.split(rng)
     agent: SACAgent = make_sac_agent(
