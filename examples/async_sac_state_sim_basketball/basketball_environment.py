@@ -319,7 +319,8 @@ class BasketEnv(MujocoGymEnv):
                 block_pos = self._data.sensor("block_pos").data[:2]
                 # dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
                 dist = np.linalg.norm(block_pos - self.circle_o)
-                dist_rew = np.exp(-dist)
+                # dist_rew = np.exp(-dist)
+                dist_rew = 2 - dist
                 rew += dist_rew
 
         reward_info = {

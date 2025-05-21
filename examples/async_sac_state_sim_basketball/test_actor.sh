@@ -5,6 +5,7 @@ python async_sac_state_sim.py "$@" \
     --render \
     --exp_name=serl_dev_sim_test \
     --seed 0 \
+    --port 1145 \
     --random_steps 10 \
     --actor_steps 40000 \
     --debug

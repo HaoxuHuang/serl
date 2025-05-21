@@ -34,7 +34,7 @@ import basketball_environment
 register(
     id="Basket-v0",
     entry_point="basketball_environment:BasketEnv",
-    max_episode_steps=100,
+    max_episode_steps=1000,
 )
 from basketball_env_monitor import BasketMonitorWrapper
 
@@ -97,6 +97,7 @@ flags.DEFINE_float("control_dt", 0.02, "Control timestep (seconds).")
 flags.DEFINE_float("physics_dt", 0.002, "Physics simulation timestep (seconds).")
 flags.DEFINE_float("time_limit", 10.0, "Maximum episode duration (seconds).")
 
+flags.DEFINE_float("discount", 0.9999, "Discount.")
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
@@ -345,6 +346,7 @@ def main(_):
     rng, sampling_rng = jax.random.split(rng)
     agent: SACAgent = make_sac_agent(
         seed=FLAGS.seed,
+        discount=FLAGS.discount,
         sample_obs=env.observation_space.sample(),
         sample_action=env.action_space.sample(),
     )
