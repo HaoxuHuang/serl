@@ -67,7 +67,23 @@
     <mesh name="link5_c2" file="franka_emika_panda/assets/link5_collision_2.obj"/>
     <mesh name="link6_c" file="franka_emika_panda/assets/link6.stl"/>
     <mesh name="link7_c" file="franka_emika_panda/assets/link7.stl"/>
-    <mesh name="hand_c" file="franka_emika_panda/assets/ball_thrower.stl" scale="0.0005 0.0005 0.0005"/> 
+    <mesh name="hand_c0" file="franka_emika_panda/assets/ball_thrower_part0.stl" scale="0.0005 0.0005 0.0005"/> 
+    <mesh name="hand_c1" file="franka_emika_panda/assets/ball_thrower_part1.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c2" file="franka_emika_panda/assets/ball_thrower_part2.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c3" file="franka_emika_panda/assets/ball_thrower_part3.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c4" file="franka_emika_panda/assets/ball_thrower_part4.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c5" file="franka_emika_panda/assets/ball_thrower_part5.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c6" file="franka_emika_panda/assets/ball_thrower_part6.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c7" file="franka_emika_panda/assets/ball_thrower_part7.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c8" file="franka_emika_panda/assets/ball_thrower_part8.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c9" file="franka_emika_panda/assets/ball_thrower_part9.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c10" file="franka_emika_panda/assets/ball_thrower_part10.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c11" file="franka_emika_panda/assets/ball_thrower_part11.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c12" file="franka_emika_panda/assets/ball_thrower_part12.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c13" file="franka_emika_panda/assets/ball_thrower_part13.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c14" file="franka_emika_panda/assets/ball_thrower_part14.stl" scale="0.0005 0.0005 0.0005"/>
+    <mesh name="hand_c15" file="franka_emika_panda/assets/ball_thrower_part15.stl" scale="0.0005 0.0005 0.0005"/> 
+    
 
     <mesh file="franka_emika_panda/assets/link0_0.obj"/>
     <mesh file="franka_emika_panda/assets/link0_1.obj"/>
@@ -234,7 +250,22 @@
                       <site name="pinch" pos="0 0 0.145"/>
                       <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
                       <geom mesh="ball_thrower" material="off_white" class="panda/visual" />
-                      <geom mesh="hand_c" class="panda/collision"/>
+                      <geom mesh="hand_c0" class="panda/collision"/>
+                      <geom mesh="hand_c1" class="panda/collision"/>
+                      <geom mesh="hand_c2" class="panda/collision"/>
+                      <geom mesh="hand_c3" class="panda/collision"/>
+                      <geom mesh="hand_c4" class="panda/collision"/>
+                      <geom mesh="hand_c5" class="panda/collision"/>
+                      <geom mesh="hand_c6" class="panda/collision"/>
+                      <geom mesh="hand_c7" class="panda/collision"/>
+                      <geom mesh="hand_c8" class="panda/collision"/>
+                      <geom mesh="hand_c9" class="panda/collision"/>
+                      <geom mesh="hand_c10" class="panda/collision"/>
+                      <geom mesh="hand_c11" class="panda/collision"/>
+                      <geom mesh="hand_c12" class="panda/collision"/>
+                      <geom mesh="hand_c13" class="panda/collision"/>
+                      <geom mesh="hand_c14" class="panda/collision"/>
+                      <geom mesh="hand_c15" class="panda/collision"/>
                     </body>
                     <!-- <body name="attachment" pos="0 0 0.107" quat="0.3826834 0 0 0.9238795">
                       <camera name="handcam_depth" pos="-0.05 0 0" fovy="62" quat="0 1 -1 0"/>
