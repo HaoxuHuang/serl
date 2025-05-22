@@ -9,5 +9,6 @@ python async_sac_state_sim.py "$@" \
     --critic_actor_ratio 8 \
     --batch_size 256 \
     --checkpoint_period 10000 \
-    --checkpoint_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_$(date +"%H-%M-%S")"
+    --discount 0.999 \
+    --checkpoint_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_$(date +"%Y-%m-%d_%H-%M-%S")"
     # --debug # wandb is disabled when debug

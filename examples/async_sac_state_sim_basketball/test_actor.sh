@@ -7,5 +7,5 @@ python async_sac_state_sim.py "$@" \
     --seed 0 \
     --port 1145 \
     --random_steps 10 \
-    --actor_steps 40000 \
-    --debug
+    --actor_steps 40000
+    # --debug

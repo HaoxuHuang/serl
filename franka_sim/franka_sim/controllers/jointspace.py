@@ -36,7 +36,7 @@ def jointspace(
     dof_ids: np.ndarray,
     joint: np.ndarray,
     gains: Union[Tuple[float, float, float], np.ndarray] = (200.0, 200.0, 200.0, 200.0, 150.0, 150.0, 150.0),
-    damping_ratio: float = 1.0,
+    damping_ratio: float = 0.05,
     max_acceleration: Optional[float] = None,
     gravity_comp: bool = True,
 ) -> np.ndarray:

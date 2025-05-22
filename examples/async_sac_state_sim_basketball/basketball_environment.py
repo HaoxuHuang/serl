@@ -320,7 +320,7 @@ class BasketEnv(MujocoGymEnv):
                 # dist = max(0., np.linalg.norm(block_pos - self.circle_o) - self.circle_r)
                 dist = np.linalg.norm(block_pos - self.circle_o)
                 # dist_rew = np.exp(-dist)
-                dist_rew = 2 - dist
+                dist_rew = np.linalg.norm(self.circle_o) - dist
                 rew += dist_rew
 
         reward_info = {
@@ -347,7 +347,8 @@ if __name__ == "__main__":
     for i in range(500):
         # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
         # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
-        action = np.array([0,-1,0,0,0,0,1]) * np.pi * 0.1
+        # action = np.array([0,-1,0,0,0,1,0]) * np.pi * 0.1
+        action = np.random.random(7)*2-1
         obs, rew, terminated, _, _ = env.step(action)
         # env.reset()
         env.render()
@@ -356,8 +357,8 @@ if __name__ == "__main__":
                 env._action_scale - obs['state']['panda/joint_pos']
             errors.append(error)
         last_obs = obs
-        # if terminated:
-        #     env.reset()
+        if terminated:
+            env.reset()
     # for i in range(500):
     #     obs, rew, terminated, _, _ = env.step(np.random.uniform(-3.14, -3.14, 7))
     #     env.render()
