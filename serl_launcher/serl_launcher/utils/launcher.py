@@ -14,6 +14,7 @@ from serl_launcher.agents.continuous.bc import BCAgent
 from serl_launcher.agents.continuous.sac import SACAgent
 from serl_launcher.agents.continuous.drq import DrQAgent
 from serl_launcher.agents.continuous.vice import VICEAgent
+from serl_launcher.agents.continuous.bc1 import BC1Agent
 
 from serl_launcher.data.data_store import (
     MemoryEfficientReplayBufferDataStore,
@@ -44,6 +45,35 @@ def make_bc_agent(
         use_proprio=True,
         encoder_type=encoder_type,
         image_keys=image_keys,
+    )
+
+
+def make_bc1_agent(seed, sample_obs, sample_action, discount=0.99):
+    return BC1Agent.create_states(
+        jax.random.PRNGKey(seed),
+        sample_obs,
+        sample_action,
+        policy_kwargs={
+            "tanh_squash_distribution": True,
+            "std_parameterization": "exp",
+            "std_min": 1e-5,
+            "std_max": 5,
+        },
+        critic_network_kwargs={
+            "activations": nn.tanh,
+            "use_layer_norm": True,
+            "hidden_dims": [256, 256],
+        },
+        policy_network_kwargs={
+            "activations": nn.tanh,
+            "use_layer_norm": True,
+            "hidden_dims": [256, 256],
+        },
+        temperature_init=1e-2,
+        discount=discount,
+        backup_entropy=False,
+        critic_ensemble_size=10,
+        critic_subsample_size=2,
     )
 
 
