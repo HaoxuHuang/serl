@@ -549,12 +549,15 @@ class BC1Agent(flax.struct.PyTreeNode):
         Batch dimension must be divisible by `utd_ratio`.
         """
         # Take one gradient descent step on the actor and temperature
-        agent, actor_temp_infos = agent.update(
+        agent, actor_temp_infos = self.update(
             batch,
             pmap_axis=pmap_axis,
             networks_to_update=frozenset({"actor"}),
         )
-        del actor_temp_infos["critic", "temperature"]
+        del actor_temp_infos["critic"]
+        del actor_temp_infos["critic_lr"]
+        del actor_temp_infos["temperature"]
+        del actor_temp_infos["temperature_lr"]
 
         infos = {**actor_temp_infos}
 

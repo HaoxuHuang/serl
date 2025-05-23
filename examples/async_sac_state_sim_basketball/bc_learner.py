@@ -11,7 +11,7 @@ import tqdm
 from absl import app, flags
 from flax.training import checkpoints
 
-from agentlace.data.data_store import populate_data_store
+from serl_launcher.data.data_store import populate_data_store
 from agentlace.trainer import TrainerClient, TrainerServer
 from serl_launcher.utils.launcher import (
     make_bc1_agent,
@@ -21,7 +21,7 @@ from serl_launcher.utils.launcher import (
 )
 
 from gym.wrappers.record_episode_statistics import RecordEpisodeStatistics
-from serl_launcher.agents.continuous.sac import BC1Agent
+from serl_launcher.agents.continuous.bc1 import BC1Agent
 from serl_launcher.common.evaluation import evaluate
 from serl_launcher.utils.timer_utils import Timer
 
@@ -222,7 +222,7 @@ def main(_):
         type="replay_buffer",
         preload_rlds_path=FLAGS.preload_rlds_path,
     )
-    replay_buffer = populate_data_store(replay_buffer, FLAGS.load_demo_path)
+    replay_buffer = populate_data_store(replay_buffer, [FLAGS.load_demo_path])
     replay_iterator = replay_buffer.get_iterator(
         sample_args={
             "batch_size": FLAGS.batch_size * FLAGS.critic_actor_ratio,
