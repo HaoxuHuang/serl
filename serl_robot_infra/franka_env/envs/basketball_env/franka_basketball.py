@@ -111,10 +111,11 @@ class FrankaBasketball(FrankaEnv):
         # 10) Calibrate the position
         center = np.array(list(center) + [1])
         center = np.dot(self.calibration_matrix, center)
-        center = np.array([center[0] / center[2], center[1] / center[2]])
+        center = np.array(
+            [center[0] / center[2], center[1] / center[2]]) - self.target_position
 
         # 11) Append & keep only the most recent 9 positions
-        self.ball_pos.append(center - self.target_position)
+        self.ball_pos.append(center)
         if len(self.ball_pos) > 9:
             self.ball_pos.pop(0)
 
@@ -150,7 +151,8 @@ class FrankaBasketball(FrankaEnv):
             return None, "out of range"
 
         # Non‐max suppression against neighbors (3 and 5)
-        if mag < np.max([np.linalg.norm(x) for x in acc[3:5]]):
+        neighbor_mags = [np.linalg.norm(acc[3]), np.linalg.norm(acc[5])]
+        if mag < max(neighbor_mags):
             return None, "not maximum"
 
         return center_acc, "hit ground"
@@ -186,13 +188,16 @@ class FrankaBasketball(FrankaEnv):
             self.close_cameras()
 
         self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            raise RuntimeError("Unable to open camera.")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        # Compute the camera calibration matrix with calibration_pos
+
+        self.calibration_matrix = None
         if self.calibration_pos is not None:
             self.calibration_matrix = cv2.findHomography(
                 self.calibration_pos[0], self.calibration_pos[1])[0]
-        else:
+        if self.calibration_matrix is None:
             self.calibration_matrix = np.eye(3)
 
         with self.camera_lock:
