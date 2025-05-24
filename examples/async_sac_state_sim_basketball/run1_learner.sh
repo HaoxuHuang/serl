@@ -1,15 +1,15 @@
 export XLA_PYTHON_CLIENT_PREALLOCATE=false && \
 export XLA_PYTHON_CLIENT_MEM_FRACTION=.05 && \
-python bc.py "$@" \
+python async_sac_state_sim.py "$@" \
     --learner \
     --exp_name=serl_dev_sim_test \
     --seed 0 \
-    --training_starts 1000 \
-    --learner_steps 5001 \
+    --training_starts 1 \
+    --learner_steps 750000 \
     --critic_actor_ratio 8 \
     --batch_size 256 \
-    --checkpoint_period 5000 \
+    --checkpoint_period 10000 \
     --discount 0.999 \
     --checkpoint_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_$(date +"%Y-%m-%d_%H-%M-%S")" \
-    --load_demo_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/demos/demos_2025-05-23_22-42-21" \
-    --debug # wandb is disabled when debug
+    --load_checkpoint "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_2025-05-24_18-32-08" \
+    # --debug # wandb is disabled when debug

@@ -183,6 +183,7 @@ def learner(rng, agent: BC1Agent, replay_buffer, replay_iterator):
     """
     The learner loop, which runs when "--learner" is set to True.
     """
+    assert FLAGS.load_demo_path is not None
     if FLAGS.load_checkpoint != None:
         params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
         params = params["params"]
@@ -262,7 +263,6 @@ def main(_):
     num_devices = len(devices)
     sharding = jax.sharding.PositionalSharding(devices)
     assert FLAGS.batch_size % num_devices == 0
-    assert FLAGS.load_demo_path is not None
 
     # seed
     rng = jax.random.PRNGKey(FLAGS.seed)

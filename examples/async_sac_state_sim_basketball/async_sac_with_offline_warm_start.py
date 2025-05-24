@@ -137,7 +137,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
         params = params["params"]
         agent = agent.replace(state=agent.state.replace(params=params))
-        print_green('Loaded checkpoint from', FLAGS.load_checkpoint)
+        print_green('Loaded checkpoint from ' + FLAGS.load_checkpoint)
 
     eval_env = gym.make(FLAGS.env,
                         action_scale=FLAGS.action_scale,
