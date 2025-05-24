@@ -6,6 +6,7 @@ import copy
 
 from franka_env.envs.franka_env import FrankaEnv
 from franka_env.utils.rotations import euler_2_quat
+from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
 
 class FrankaBasketball(FrankaEnv):
@@ -18,7 +19,13 @@ class FrankaBasketball(FrankaEnv):
         pass
 
     def go_to_rest(self, joint_reset=False):
-        pass
+        # stop
+        self._update_currpos()
+        self._send_pos_command(self.currpos)
+        time.sleep(0.5)
+
+        # reset
+        super().go_to_rest(joint_reset)
 
     def init_cameras(self):
         """
