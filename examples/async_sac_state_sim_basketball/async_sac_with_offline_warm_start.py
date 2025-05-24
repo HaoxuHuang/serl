@@ -244,7 +244,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
 ##############################################################################
 
 
-def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
+def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, offline_iterator):
     """
     The learner loop, which runs when "--learner" is set to True.
     """
@@ -277,26 +277,20 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
     server.register_data_store("actor_env", replay_buffer)
     server.start(threaded=True)
 
-    if FLAGS.load_offline_data and FLAGS.data_store_path is not None:
-        import os
-        from serl_launcher.data.data_store import populate_data_store
-        replay_buffer = populate_data_store(
-            replay_buffer, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
-        print_green('Loaded offline data store from ' + FLAGS.data_store_path)
-
     # Loop to wait until replay_buffer is filled
-    pbar = tqdm.tqdm(
-        total=FLAGS.training_starts,
-        initial=len(replay_buffer),
-        desc="Filling up replay buffer",
-        position=0,
-        leave=True,
-    )
-    while len(replay_buffer) < FLAGS.training_starts:
+    if offline_data is None:
+        pbar = tqdm.tqdm(
+            total=FLAGS.training_starts,
+            initial=len(replay_buffer),
+            desc="Filling up replay buffer",
+            position=0,
+            leave=True,
+        )
+        while len(replay_buffer) < FLAGS.training_starts:
+            pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
+            time.sleep(1)
         pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
-        time.sleep(1)
-    pbar.update(len(replay_buffer) - pbar.n)  # Update progress bar
-    pbar.close()
+        pbar.close()
 
     # send the initial network to the actor
     server.publish_network(agent.state.params)
@@ -316,6 +310,22 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator):
         # Train the networks
         with timer.context("sample_replay_buffer"):
             batch = next(replay_iterator)
+        
+        if offline_data is not None:
+            with timer.context("sample_offline_data"):
+                offline_batch = next(offline_iterator)
+                ratio = 0.5
+                batch = jax.tree_map(
+                    lambda x, y: jnp.concatenate(
+                        [
+                            x[: int(x.shape[0] * ratio)],
+                            y[: int(y.shape[0] * (1 - ratio))],
+                        ],
+                        axis=0,
+                    ),
+                    batch,
+                    offline_batch,
+                )
 
         with timer.context("train"):
             agent, update_info = agent.update_high_utd(
@@ -410,13 +420,37 @@ def main(_):
             },
             device=sharding.replicate(),
         )
+        if FLAGS.load_offline_data and FLAGS.data_store_path is not None:
+            import os
+            from serl_launcher.data.data_store import populate_data_store
+            offline_data = make_replay_buffer(
+                env,
+                capacity=FLAGS.replay_buffer_capacity,
+                rlds_logger_path=FLAGS.log_rlds_path,
+                type="replay_buffer",
+                preload_rlds_path=FLAGS.preload_rlds_path,
+            )
+            offline_iterator = offline_data.get_iterator(
+                sample_args={
+                    "batch_size": FLAGS.batch_size * FLAGS.critic_actor_ratio,
+                },
+                device=sharding.replicate(),
+            )
+            offline_data = populate_data_store(
+                offline_data, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
+            print_green('Loaded offline data store from ' + FLAGS.data_store_path)
+        else:
+            offline_data = None
+            offline_iterator = None
         # learner loop
         print_green("starting learner loop")
         learner(
             sampling_rng,
             agent,
             replay_buffer,
-            replay_iterator=replay_iterator,
+            replay_iterator,
+            offline_data,
+            offline_iterator
         )
 
     elif FLAGS.actor:
