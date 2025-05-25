@@ -439,6 +439,8 @@ def main(_):
             )
             offline_data = populate_data_store(
                 offline_data, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
+            replay_buffer = populate_data_store(
+                replay_buffer, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
             print_green('Loaded offline data store from ' + FLAGS.data_store_path)
         else:
             offline_data = None
