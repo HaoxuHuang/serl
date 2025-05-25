@@ -43,6 +43,12 @@ class FrankaBasketball:
         self.record_length = kwargs.pop("record_length", 30)
         self.target_position = np.array(kwargs.pop(
             "target_position", (0, 0)))
+        
+        # safety limit
+        self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
+        self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
+
+
         self.context_length = kwargs.pop("context_length", 9)
         self.rec_detection = []
         self.rec = []
@@ -304,3 +310,49 @@ class FrankaBasketball:
             self.camera_reward = None
         
         print('Reset.')
+    def clip_safety_box(self, pose):
+        """
+        Clip the joint pose to be in safety range.
+        """
+        pose = np.clip(
+            pose, self.joint_bounding_box_low, self.joint_bounding_box_high
+        )
+        return pose
+    
+    def step(self, action: np.ndarray) -> tuple:
+        """standard gym step function."""
+        start_time = time.time()
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+
+        self.nextjointpos = self.q.copy()
+        self.nextjointpos += action * self.action_scale
+
+        self._send_joint_command(self.clip_safety_box(self.nextpos))
+
+        self.curr_path_length += 1
+        dt = time.time() - start_time
+        time.sleep(max(0, (1.0 / self.hz) - dt))
+
+        self._update_currpos()
+        ob = self._get_obs()
+        reward = self.compute_reward(ob)
+        done = self.curr_path_length >= self.max_episode_length or reward > 0
+        del ob['images']    # The images are only used for compute rewards.
+        return ob, reward, done, False, {}
+    
+    def _send_joint_command(self, joint: np.ndarray):
+        """Internal function to send joint command to the robot."""
+        self._recover()
+        arr = np.array(joint).astype(np.float32)
+        data = {"arr": arr.tolist()}
+        requests.post(self.url + "joint", json=data)
+
+    def _get_obs(self) -> dict:
+        images = self.get_im()
+        state_observation = {
+            "tcp_pos": self.currpos,
+            "tcp_vel": self.currvel,
+            "joint_pos": self.q,
+            "joint_vel": self.dq
+        }
+        return copy.deepcopy(dict(images=images, state=state_observation))

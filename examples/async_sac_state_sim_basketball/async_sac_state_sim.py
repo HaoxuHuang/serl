@@ -110,6 +110,11 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     """
     This is the actor loop, which runs when "--actor" is set to True.
     """
+    if FLAGS.load_checkpoint != None:
+        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
+        params = params["params"]
+        agent = agent.replace(state=agent.state.replace(params=params))
+
     client = TrainerClient(
         "actor_env",
         FLAGS.ip,
