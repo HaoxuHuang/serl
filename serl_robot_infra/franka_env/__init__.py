@@ -30,3 +30,9 @@ register(
     entry_point="franka_env.envs.bin_relocation_env:FrankaBinRelocation",
     max_episode_steps=100,
 )
+
+register(
+    id="FrankaBasketball-State-v0",
+    entry_point="franka_env.envs.basketball_env:FrankaBasketball",
+    max_episode_steps=1000,
+)
