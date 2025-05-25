@@ -6,7 +6,7 @@ import copy
 import cv2
 import threading
 
-from franka_env.envs.franka_env import FrankaEnv
+# from franka_env.envs.franka_env import FrankaEnv
 from franka_env.utils.rotations import euler_2_quat
 from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
@@ -23,7 +23,7 @@ def print_red(x):
     return print("\033[91m {}\033[00m".format(x))
 
 
-class FrankaBasketball(FrankaEnv):
+class FrankaBasketball:
     def __init__(self, *args, **kwargs):
         self.camera_lock = threading.Lock()
         self.camera_running = False
@@ -31,14 +31,15 @@ class FrankaBasketball(FrankaEnv):
         self.camera_reward = None
         self.ball_pos = []
         self.second_derivative_range = kwargs.pop(
-            "second_derivative_range", (0.1, 0.5))
+            "second_derivative_range", (1, 100))
         self.trusted_region = kwargs.pop(
-            "trusted_region", ((0, 0), (640, 480)))
+            "trusted_region", ((220, 100), (450, 500)))
         self.calibration_pos = kwargs.pop(
             "calibration_pos", None)
         self.target_position = np.array(kwargs.pop(
             "target_position", (0, 0)))
-        super().__init__(*args, **kwargs)
+        self.rec = []
+        # super().__init__(*args, **kwargs)
 
     def compute_reward(self, obs):
         """
@@ -61,27 +62,60 @@ class FrankaBasketball(FrankaEnv):
         time.sleep(0.5)
 
         # reset
-        super().go_to_rest(joint_reset)
+        super().go_to_rest(joint_rezset)
 
     def capture_ball_pos(self, frame):
-        """
+        """ 
         Capture ball position from camera image.
 
         Detect the orange ball in the image and compute its position, assuming the ball is on the ground.
         """
+        import matplotlib.pyplot as plt
+        vis = []
+        # vis.append(frame)
+        # plt.imshow(frame)
+        # plt.show()
+
         # 1) Smooth & convert to HSV
         blurred = cv2.GaussianBlur(frame, (7, 7), 0)
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+        # vis.append(hsv)
+        # plt.imshow(hsv)
+        # plt.show()
 
         # 2) Threshold for “orange” in HSV space
         #    (tweak these ranges if your lighting/background differs)
-        lower_orange = np.array([5, 150, 150])
-        upper_orange = np.array([30, 255, 255])
+        lower_orange = np.array([15, 80, 150])
+        upper_orange = np.array([25, 255, 255])
         mask = cv2.inRange(hsv, lower_orange, upper_orange)
+        mask = np.logical_and(mask, self.region_mask)
+        # vis.append(self.region_mask)
+        # plt.imshow(self.region_mask)
+        # plt.show()
 
         # 3) Morphological open+close to remove noise
-        mask = cv2.erode(mask, None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        mask = np.array(mask * 255, dtype=np.uint8)
+        mask = cv2.erode(mask, dst=None, kernel=kernel, iterations=2)
+        mask = cv2.dilate(mask, dst=None, kernel=kernel, iterations=2)
+        # vis.append(mask)
+        # plt.imshow(mask)
+        # plt.show()
+
+        # plt.figure(figsize=(12,12))
+        # plt.subplot(2,2,1)
+        # plt.imshow(vis[0])
+        # plt.subplot(2,2,2)
+        # plt.imshow(vis[1])
+        # plt.subplot(2,2,3)
+        # plt.imshow(vis[2])
+        # plt.subplot(2,2,4)
+        # plt.imshow(vis[3])
+        # plt.tight_layout()
+        # plt.show()
+        
+
+        self.rec.append(mask)
 
         # 4) Find contours in the mask
         cnts = cv2.findContours(
@@ -96,8 +130,8 @@ class FrankaBasketball(FrankaEnv):
             # 6) Compute the centroid via moments (or use minEnclosingCircle)
             M = cv2.moments(c)
             if M["m00"] > 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
+                cx = int(M["m01"] / M["m00"])
+                cy = int(M["m10"] / M["m00"])
                 # 7) Check if the centroid is within the trusted region
                 if (self.trusted_region[0][0] <= cx <= self.trusted_region[1][0] and
                         self.trusted_region[0][1] <= cy <= self.trusted_region[1][1]):
@@ -106,6 +140,7 @@ class FrankaBasketball(FrankaEnv):
 
         # 9) If no valid contour found, fallback to last known position (or [0,0])
         if center is None:
+            self.ball_pos = []
             return None, "no ball detected"
 
         # 10) Calibrate the position
@@ -145,6 +180,7 @@ class FrankaBasketball(FrankaEnv):
         # Take the center index (4)
         center_acc = acc[4]
         mag = np.linalg.norm(center_acc)
+        print(f'[{len(self.rec)}] Acceleration: '+str(mag))
 
         # Threshold on magnitude
         if mag < self.second_derivative_range[0] or mag > self.second_derivative_range[1]:
@@ -155,22 +191,25 @@ class FrankaBasketball(FrankaEnv):
         if mag < max(neighbor_mags):
             return None, "not maximum"
 
-        return center_acc, "hit ground"
+        return self.ball_pos[4], "hit ground"
 
     def camera_loop(self):
         """
         Camera loop for basketball env.
         """
         while True:
+            import time
+            st=time.time()
             ret, frame = self.cap.read()
             if not ret:
                 print_red("Failed to read frame from camera.")
                 break
 
-            self.capture_ball_pos(frame)
+            capture_pos, info = self.capture_ball_pos(frame)
+            print_yellow(f'[{len(self.rec)}] ' + str(capture_pos) + ' ' + str(info))
             contact_pos, info = self.hit_ground()
             if contact_pos is not None:
-                print_yellow(
+                print_green(
                     f"Ball hit the ground, contact position: {contact_pos}")
                 with self.camera_lock:
                     self.camera_reward = 2 - np.linalg.norm(contact_pos)
@@ -179,6 +218,8 @@ class FrankaBasketball(FrankaEnv):
                 if not self.camera_running:
                     print_yellow("Camera loop stopped.")
                     break
+            et=time.time()
+            # print('Time elapsed:',et-st)
 
     def init_cameras(self):
         """
@@ -187,18 +228,21 @@ class FrankaBasketball(FrankaEnv):
         if self.camera_loop_thread is not None:
             self.close_cameras()
 
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture('/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0', cv2.CAP_V4L2)
         if not self.cap.isOpened():
             raise RuntimeError("Unable to open camera.")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        self.region_mask = np.zeros([480,640], dtype=np.bool_)
+        self.region_mask[self.trusted_region[0][0]:self.trusted_region[1][0], self.trusted_region[0][1]:self.trusted_region[1][1]] = True
 
         self.calibration_matrix = None
         if self.calibration_pos is not None:
             self.calibration_matrix = cv2.findHomography(
                 self.calibration_pos[0], self.calibration_pos[1])[0]
         if self.calibration_matrix is None:
-            self.calibration_matrix = np.eye(3)
+            self.calibration_matrix = np.array([[0.1,0,0],[0,0.1,0],[0,0,1]])
 
         with self.camera_lock:
             self.camera_running = True
