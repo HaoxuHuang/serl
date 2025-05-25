@@ -594,3 +594,61 @@ class SACAgent(flax.struct.PyTreeNode):
         infos = {**critic_infos, **actor_temp_infos}
 
         return agent, infos
+
+
+    @partial(jax.jit, static_argnames=("utd_ratio",))
+    def get_q_info(self, batch: Batch, utd_ratio: int):
+        """
+        Get mean Q values and mean log probabilities for all (s,a) in batch,
+        supporting high-UTD splitting analogously to update_high_utd.
+        """
+        batch_size = batch["rewards"].shape[0]
+        assert (
+            batch_size % utd_ratio == 0
+        ), f"Batch size {batch_size} must be divisible by utd_ratio {utd_ratio}"
+        minibatch_size = batch_size // utd_ratio
+
+        # Split each array in the batch into (utd_ratio, minibatch_size, ...)
+        def make_minibatch(x):
+            return x.reshape((utd_ratio, minibatch_size) + x.shape[1:])
+
+        minibatches = jax.tree_map(make_minibatch, batch)
+
+        # scan body: data is a tuple of one element (the minibatch)
+        def scan_body(carry: Tuple[jnp.ndarray, jnp.ndarray], data: Tuple[Batch]):
+            q_acc, lp_acc = carry
+            (minibatch,) = data  # unpack the single minibatch
+
+            # 1) Q-value sums over this minibatch
+            qs = self.forward_critic(
+                minibatch["observations"],
+                minibatch["actions"],
+                rng=None,
+                train=False,
+            )  # shape (ensemble, minibatch_size)
+            q_sum = qs.mean(axis=0).sum()  # mean over ensemble, sum over minibatch
+
+            # 2) log-probability sums over this minibatch
+            dist = self.forward_policy(
+                minibatch["observations"],
+                rng=None,
+                train=False,
+            )
+            lp_sum = dist.log_prob(minibatch["actions"]).sum()
+
+            return (q_acc + q_sum, lp_acc + lp_sum), None
+
+        # Run the scan over the utd_ratio chunks
+        init = (0.0, 0.0)
+        (total_q, total_lp), _ = jax.lax.scan(
+            scan_body,
+            init,
+            (minibatches,),  # note the comma: xs is a tuple of one pytree
+        )
+
+        # Compute batch-level means
+        q_mean = total_q / batch_size
+        logp_mean = total_lp / batch_size
+
+        return {"q_mean": q_mean, "logp_mean": logp_mean}
+

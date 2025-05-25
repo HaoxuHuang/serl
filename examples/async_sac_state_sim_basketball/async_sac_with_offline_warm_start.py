@@ -307,6 +307,10 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
         desc="replay buffer",
     )
 
+    fixed_offline_batch = next(offline_iterator)
+    import copy
+    fixed_offline_batch = copy.deepcopy(fixed_offline_batch)
+
     for step in tqdm.tqdm(range(FLAGS.learner_steps), dynamic_ncols=True, desc="learner"):
         # Train the networks
         with timer.context("sample_replay_buffer"):
@@ -331,7 +335,9 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
         with timer.context("train"):
             agent, update_info = agent.update_high_utd(
                 batch, utd_ratio=FLAGS.utd_ratio)
+            q_info = agent.get_q_info(fixed_offline_batch, utd_ratio=FLAGS.utd_ratio)
             agent = jax.block_until_ready(agent)
+            q_info = {k: float(v.item()) for k, v in q_info.items()}
 
             # publish the updated network
             server.publish_network(agent.state.params)
@@ -340,6 +346,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
             wandb_logger.log(update_info, step=update_steps)
             wandb_logger.log(
                 {"timer": timer.get_average_times()}, step=update_steps)
+            wandb_logger.log(q_info, step=update_steps)
 
         if FLAGS.checkpoint_period and update_steps % FLAGS.checkpoint_period == 0:
             assert FLAGS.checkpoint_path is not None
@@ -438,9 +445,9 @@ def main(_):
                 device=sharding.replicate(),
             )
             offline_data = populate_data_store(
-                offline_data, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
+                offline_data, [FLAGS.data_store_path])
             replay_buffer = populate_data_store(
-                replay_buffer, [os.path.join(FLAGS.data_store_path, 'data_store.pkl')])
+                replay_buffer, [FLAGS.data_store_path])
             print_green('Loaded offline data store from ' + FLAGS.data_store_path)
         else:
             offline_data = None

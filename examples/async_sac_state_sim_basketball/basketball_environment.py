@@ -323,6 +323,7 @@ class BasketEnv(MujocoGymEnv):
                 dist_rew = np.linalg.norm(self.circle_o) - dist
                 rew += dist_rew
 
+        rew *= 10
         reward_info = {
             'total_reward': rew,
             'angle_reward': angle_rew,
