@@ -38,6 +38,10 @@ class FrankaBasketball(FrankaEnv):
             "calibration_pos", None)
         self.target_position = np.array(kwargs.pop(
             "target_position", (0, 0)))
+        
+        # safety limit
+        self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
+        self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
         super().__init__(*args, **kwargs)
 
     def compute_reward(self, obs):
@@ -213,3 +217,32 @@ class FrankaBasketball(FrankaEnv):
         self.cap.release()
         self.camera_loop_thread = None
         print_green("Camera closed.")
+
+    def clip_safety_box(self, pose):
+        """
+        Clip the joint pose to be in safety range.
+        """
+        pose = np.clip(
+            pose, self.joint_bounding_box_low, self.joint_bounding_box_high
+        )
+        return pose
+    
+    def step(self, action: np.ndarray) -> tuple:
+        """standard gym step function."""
+        start_time = time.time()
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+
+        self.nextjointpos = self.currjointpos.copy()
+        self.nextjointpos += action * self.action_scale
+
+        self._send_joint_pos_command(self.clip_safety_box(self.nextpos))
+
+        self.curr_path_length += 1
+        dt = time.time() - start_time
+        time.sleep(max(0, (1.0 / self.hz) - dt))
+
+        self._update_currpos()
+        ob = self._get_obs()
+        reward = self.compute_reward(ob)
+        done = self.curr_path_length >= self.max_episode_length or reward > 0
+        return ob, reward, done, False, {}
