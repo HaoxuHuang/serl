@@ -11,5 +11,6 @@ python async_sac_with_offline_warm_start.py "$@" \
     --checkpoint_period 10000 \
     --load_offline_data \
     --data_store_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/buffer" \
-    --checkpoint_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_$(date +"%Y-%m-%d_%H-%M-%S")"
+    --checkpoint_path "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_$(date +"%Y-%m-%d_%H-%M-%S")" \
+    --offline_data_steps 400000 \
     # --debug # wandb is disabled when debug

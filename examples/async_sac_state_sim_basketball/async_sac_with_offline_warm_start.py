@@ -102,6 +102,7 @@ flags.DEFINE_float("discount", 0.9999, "Discount.")
 flags.DEFINE_string("data_store_path", None, "Path to save and load data_store.")
 flags.DEFINE_boolean("teacher", False, "Is this a teacher agent.")
 flags.DEFINE_boolean("load_offline_data", False, "Load offline data.")
+flags.DEFINE_integer("offline_data_steps", None, "Number of offline data steps.")
 
 
 def print_green(x):
@@ -311,7 +312,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
         with timer.context("sample_replay_buffer"):
             batch = next(replay_iterator)
         
-        if offline_data is not None:
+        if offline_data is not None and (FLAGS.offline_data_steps is None or update_steps < FLAGS.offline_data_steps):
             with timer.context("sample_offline_data"):
                 offline_batch = next(offline_iterator)
                 ratio = 0.5
