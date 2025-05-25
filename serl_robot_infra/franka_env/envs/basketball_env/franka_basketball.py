@@ -232,10 +232,10 @@ class FrankaBasketball(FrankaEnv):
         start_time = time.time()
         action = np.clip(action, self.action_space.low, self.action_space.high)
 
-        self.nextjointpos = self.currjointpos.copy()
+        self.nextjointpos = self.q.copy()
         self.nextjointpos += action * self.action_scale
 
-        self._send_joint_pos_command(self.clip_safety_box(self.nextpos))
+        self._send_joint_command(self.clip_safety_box(self.nextpos))
 
         self.curr_path_length += 1
         dt = time.time() - start_time
@@ -245,4 +245,22 @@ class FrankaBasketball(FrankaEnv):
         ob = self._get_obs()
         reward = self.compute_reward(ob)
         done = self.curr_path_length >= self.max_episode_length or reward > 0
+        del ob['images']    # The images are only used for compute rewards.
         return ob, reward, done, False, {}
+    
+    def _send_joint_command(self, joint: np.ndarray):
+        """Internal function to send joint command to the robot."""
+        self._recover()
+        arr = np.array(joint).astype(np.float32)
+        data = {"arr": arr.tolist()}
+        requests.post(self.url + "joint", json=data)
+
+    def _get_obs(self) -> dict:
+        images = self.get_im()
+        state_observation = {
+            "tcp_pos": self.currpos,
+            "tcp_vel": self.currvel,
+            "joint_pos": self.q,
+            "joint_vel": self.dq
+        }
+        return copy.deepcopy(dict(images=images, state=state_observation))
