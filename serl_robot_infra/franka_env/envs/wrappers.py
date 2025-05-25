@@ -219,3 +219,25 @@ class SpacemouseIntervention(gym.ActionWrapper):
         info["left"] = self.left
         info["right"] = self.right
         return obs, rew, done, truncated, info
+
+
+class HandGuidance(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.last_joint_pos = None
+
+    def step(self, action):
+        obs, rew, done, truncated, info = self.env.step(action)
+        joint_pos = obs['state']['joint_pos']
+        # the hand guidance action is calculated by the delta joint position
+        if self.last_joint_pos is None:
+            info["guidance_action"] = action
+        else:
+            info["guidance_action"] = joint_pos - self.last_joint_pos
+        self.last_joint_pos = joint_pos
+        return obs, rew, done, truncated, info
+    
+    def reset(self):
+        obs, info = super().reset()
+        self.last_joint_pos = obs['state']['joint_pos']
+        return obs, info

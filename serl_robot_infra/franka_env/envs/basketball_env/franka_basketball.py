@@ -5,10 +5,10 @@ import requests
 import copy
 import cv2
 import threading
-import matplotlib.pyplot as plt
+from datetime import datetime
+from collections import OrderedDict
+from typing import Dict
 
-
-# from franka_env.envs.franka_env import FrankaEnv
 from franka_env.utils.rotations import euler_2_quat
 from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
@@ -26,7 +26,13 @@ def print_red(x):
 
 
 class FrankaBasketball:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, 
+                hz=50,
+                fake_env=False,
+                save_video=False,
+                config: BasketballEnvConfig = None,
+                max_episode_length=1000, 
+                **kwargs):
         self.camera_lock = threading.Lock()
         self.camera_running = False
         self.camera_loop_thread = None
@@ -47,13 +53,77 @@ class FrankaBasketball:
         # safety limit
         self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
         self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
+        
+        self.action_scale = config.ACTION_SCALE
+        self._TARGET_POSE = config.TARGET_POSE
+        self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
+        self.url = config.SERVER_URL
+        self.config = config
+        self.max_episode_length = max_episode_length
 
+        # convert last 3 elements from euler to quat, from size (6,) to (7,)
+        self.resetpos = np.concatenate(
+            [config.RESET_POSE[:3], euler_2_quat(config.RESET_POSE[3:])]
+        )
 
-        self.context_length = kwargs.pop("context_length", 9)
-        self.rec_detection = []
-        self.rec = []
-        self.rec_hit = []
-        # super().__init__(*args, **kwargs)
+        self.currpos = self.resetpos.copy()
+        self.currvel = np.zeros((6,))
+        self.q = np.zeros((7,))
+        self.dq = np.zeros((7,))
+        self.currforce = np.zeros((3,))
+        self.currtorque = np.zeros((3,))
+
+        self.curr_gripper_pos = 0
+        self.gripper_binary_state = 0  # 0 for open, 1 for closed
+        self.lastsent = time.time()
+        self.randomreset = config.RANDOM_RESET
+        self.random_xy_range = config.RANDOM_XY_RANGE
+        self.random_rz_range = config.RANDOM_RZ_RANGE
+        self.hz = hz
+        self.joint_reset_cycle = 200  # reset the robot joint every 200 cycles
+
+        if save_video:
+            print("Saving videos!")
+        self.save_video = save_video
+        self.recording_frames = []
+
+        # boundary box
+        self.xyz_bounding_box = gym.spaces.Box(
+            config.ABS_POSE_LIMIT_LOW[:3],
+            config.ABS_POSE_LIMIT_HIGH[:3],
+            dtype=np.float64,
+        )
+        self.rpy_bounding_box = gym.spaces.Box(
+            config.ABS_POSE_LIMIT_LOW[3:],
+            config.ABS_POSE_LIMIT_HIGH[3:],
+            dtype=np.float64,
+        )
+        # Action/Observation Space
+        self.action_space = gym.spaces.Box(
+            np.ones((7,), dtype=np.float32) * -1,
+            np.ones((7,), dtype=np.float32),
+        )
+
+        self.observation_space = gym.spaces.Dict(
+            {
+                "state": gym.spaces.Dict(
+                    {
+                        "tcp_pose": gym.spaces.Box(
+                            -np.inf, np.inf, shape=(7,)
+                        ),  # xyz + quat
+                        "tcp_vel": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
+                        "joint_pose": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
+                        "joint_vel": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
+                    }
+                ),
+            }
+        )
+        self.cycle_count = 0
+
+        if fake_env:
+            return
+
+        print("Initialized Franka")
 
     def compute_reward(self, obs):
         """
@@ -72,11 +142,49 @@ class FrankaBasketball:
     def go_to_rest(self, joint_reset=False):
         # stop
         self._update_currpos()
-        self._send_pos_command(self.currpos)
+        self._send_joint_command(self.q)
+        time.sleep(0.5)
+
+        print("JOINT RESET")
+        requests.post(self.url + "jointreset")
         time.sleep(0.5)
 
         # reset
-        super().go_to_rest(joint_rezset)
+        input("Press enter when you finish picking up the ball and reset joints...")
+
+    def reset(self, joint_reset=False, **kwargs):
+        if self.save_video:
+            self.save_video_recording()
+
+        self.cycle_count += 1
+        if self.cycle_count % self.joint_reset_cycle == 0:
+            self.cycle_count = 0
+            joint_reset = True
+
+        self.go_to_rest(joint_reset=joint_reset)
+        self._recover()
+        self.curr_path_length = 0
+
+        self._update_currpos()
+        obs = self._get_obs()
+
+        return obs, {}
+    
+    def save_video_recording(self):
+        try:
+            if len(self.recording_frames):
+                video_writer = cv2.VideoWriter(
+                    f'./videos/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.mp4',
+                    cv2.VideoWriter_fourcc(*"mp4v"),
+                    10,
+                    self.recording_frames[0].shape[:2][::-1],
+                )
+                for frame in self.recording_frames:
+                    video_writer.write(frame)
+                video_writer.release()
+            self.recording_frames.clear()
+        except Exception as e:
+            print(f"Failed to save video: {e}")
 
     def capture_ball_pos(self, frame):
         """ 
@@ -303,13 +411,10 @@ class FrankaBasketball:
         self.camera_loop_thread = None
         print_green("Camera closed.")
 
-    
-    def reset(self):
-        with self.camera_lock:
-            self.grounded = False
-            self.camera_reward = None
-        
-        print('Reset.')
+    def _recover(self):
+        """Internal function to recover the robot from error state."""
+        requests.post(self.url + "clearerr")
+
     def clip_safety_box(self, pose):
         """
         Clip the joint pose to be in safety range.
@@ -318,6 +423,24 @@ class FrankaBasketball:
             pose, self.joint_bounding_box_low, self.joint_bounding_box_high
         )
         return pose
+    
+    def _update_currpos(self):
+        """
+        Internal function to get the latest state of the robot and its gripper.
+        """
+        ps = requests.post(self.url + "getstate").json()
+        self.currpos[:] = np.array(ps["pose"])
+        self.currvel[:] = np.array(ps["vel"])
+
+        self.currforce[:] = np.array(ps["force"])
+        self.currtorque[:] = np.array(ps["torque"])
+        self.currjacobian[:] = np.reshape(np.array(ps["jacobian"]), (6, 7))
+
+        self.q[:] = np.array(ps["q"])
+        self.dq[:] = np.array(ps["dq"])
+
+        self.curr_gripper_pos = np.array(ps["gripper_pos"])
+
     
     def step(self, action: np.ndarray) -> tuple:
         """standard gym step function."""

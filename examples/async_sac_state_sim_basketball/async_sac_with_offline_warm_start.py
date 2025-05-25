@@ -102,7 +102,9 @@ flags.DEFINE_float("discount", 0.9999, "Discount.")
 flags.DEFINE_string("data_store_path", None, "Path to save and load data_store.")
 flags.DEFINE_boolean("teacher", False, "Is this a teacher agent.")
 flags.DEFINE_boolean("load_offline_data", False, "Load offline data.")
-flags.DEFINE_integer("offline_data_steps", None, "Number of offline data steps.")
+flags.DEFINE_integer("offline_decay_start", None, "Offline decay start step.")
+flags.DEFINE_integer("offline_decay_end", None, "Offline decay end step.")
+flags.DEFINE_float("offline_ratio", 0.5, "Offline decay begining ratio.")
 
 
 def print_green(x):
@@ -316,15 +318,19 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
         with timer.context("sample_replay_buffer"):
             batch = next(replay_iterator)
         
-        if offline_data is not None and (FLAGS.offline_data_steps is None or update_steps < FLAGS.offline_data_steps):
+        ratio = 0
+        if offline_data is not None and (FLAGS.offline_decay_start is None or update_steps < FLAGS.offline_decay_end):
             with timer.context("sample_offline_data"):
                 offline_batch = next(offline_iterator)
-                ratio = 0.5
+                if FLAGS.offline_decay_start is None or update_steps < FLAGS.offline_decay_start:
+                    ratio = FLAGS.offline_ratio
+                else:
+                    ratio = FLAGS.offline_ratio * (FLAGS.offline_decay_end - update_steps) / (FLAGS.offline_decay_end - FLAGS.offline_decay_start)
                 batch = jax.tree_map(
                     lambda x, y: jnp.concatenate(
                         [
-                            x[: int(x.shape[0] * ratio)],
-                            y[: int(y.shape[0] * (1 - ratio))],
+                            x[: int(x.shape[0] * (1 - ratio))],
+                            y[: int(y.shape[0] * ratio)],
                         ],
                         axis=0,
                     ),
@@ -347,6 +353,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
             wandb_logger.log(
                 {"timer": timer.get_average_times()}, step=update_steps)
             wandb_logger.log(q_info, step=update_steps)
+            wandb_logger.log(ratio, step=update_steps)
 
         if FLAGS.checkpoint_period and update_steps % FLAGS.checkpoint_period == 0:
             assert FLAGS.checkpoint_path is not None
@@ -366,6 +373,8 @@ def main(_):
     num_devices = len(devices)
     sharding = jax.sharding.PositionalSharding(devices)
     assert FLAGS.batch_size % num_devices == 0
+    if FLAGS.offline_decay_start is not None and FLAGS.offline_decay_end is None:
+        FLAGS.offline_decay_end = FLAGS.learner_steps
 
     # seed
     rng = jax.random.PRNGKey(FLAGS.seed)
