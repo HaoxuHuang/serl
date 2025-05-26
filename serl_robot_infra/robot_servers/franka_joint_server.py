@@ -14,7 +14,7 @@ from franka_msgs.msg import ErrorRecoveryActionGoal, FrankaState
 from serl_franka_controllers.msg import ZeroJacobian
 import geometry_msgs.msg as geom_msg
 import sensor_msgs.msg as sensor_msg
-from dynamic_reconfigure.client import Client as ReconfClient
+import std_msgs.msg as std_msg
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -33,7 +33,7 @@ flags.DEFINE_list(
 )
 
 
-class FrankaServer:
+class FrankaJointServer:
     """Handles the starting and stopping of the impedance controller
     (as well as backup) joint recovery policy."""
 
@@ -42,22 +42,25 @@ class FrankaServer:
         self.ros_pkg_name = ros_pkg_name
         self.reset_joint_target = reset_joint_target
         self.gripper_type = gripper_type
+        # Franka Panda joint names
+        self.joint_names = [
+            'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
+            'panda_joint5', 'panda_joint6', 'panda_joint7'
+        ]
 
-        self.eepub = rospy.Publisher(
-            "/cartesian_impedance_controller/equilibrium_pose",
-            geom_msg.PoseStamped,
-            queue_size=10,
-        )
         self.resetpub = rospy.Publisher(
             "/franka_control/error_recovery/goal", ErrorRecoveryActionGoal, queue_size=1
+        )
+        self.jointpub = rospy.Publisher(
+            "/joint_states_desired", sensor_msg.JointState, queue_size=1
+        )
+        self.state_sub = rospy.Subscriber(
+            "franka_state_controller/franka_states", FrankaState, self._set_currpos
         )
         self.jacobian_sub = rospy.Subscriber(
             "/cartesian_impedance_controller/franka_jacobian",
             ZeroJacobian,
             self._set_jacobian,
-        )
-        self.state_sub = rospy.Subscriber(
-            "franka_state_controller/franka_states", FrankaState, self._set_currpos
         )
 
     def start_impedance(self):
@@ -140,15 +143,18 @@ class FrankaServer:
         self.start_impedance()
         print("impedance STARTED")
 
-    def move(self, pose: list):
-        """Moves to a pose: [x, y, z, qx, qy, qz, qw]"""
-        assert len(pose) == 7
-        msg = geom_msg.PoseStamped()
-        msg.header.frame_id = "0"
+    def move(self, joint_pos: list):
+        """Moves to a joint positon: joint_pos is a list of 7 joint angles"""
+        assert len(joint_pos) == 7
+        msg = sensor_msg.JointState()
+        msg.header = std_msg.Header()
         msg.header.stamp = rospy.Time.now()
-        msg.pose.position = geom_msg.Point(pose[0], pose[1], pose[2])
-        msg.pose.orientation = geom_msg.Quaternion(pose[3], pose[4], pose[5], pose[6])
-        self.eepub.publish(msg)
+        msg.name = self.joint_names
+        msg.position = joint_pos
+        msg.velocity = [0.0] * 7  # No velocity command
+        msg.effort = [0.0] * 7  # No effort command
+
+        self.jointpub.publish(msg)
 
     def _set_currpos(self, msg):
         tmatrix = np.array(list(msg.O_T_EE)).reshape(4, 4).T
@@ -208,7 +214,7 @@ def main(_):
         raise NotImplementedError("Gripper Type Not Implemented")
 
     """Starts impedance controller"""
-    robot_server = FrankaServer(
+    robot_server = FrankaJointServer(
         robot_ip=ROBOT_IP,
         gripper_type=GRIPPER_TYPE,
         ros_pkg_name=ROS_PKG_NAME,
@@ -216,9 +222,9 @@ def main(_):
     )
     robot_server.start_impedance()
 
-    reconf_client = ReconfClient(
-        "cartesian_impedance_controllerdynamic_reconfigure_compliance_param_node"
-    )
+    # reconf_client = ReconfClient(
+    #     "cartesian_impedance_controllerdynamic_reconfigure_compliance_param_node"
+    # )
 
     # Route for Starting impedance
     @webapp.route("/startimp", methods=["POST"])
@@ -347,11 +353,11 @@ def main(_):
             }
         )
 
-    # Route for updating compliance parameters
-    @webapp.route("/update_param", methods=["POST"])
-    def update_param():
-        reconf_client.update_configuration(request.json)
-        return "Updated compliance parameters"
+    # # Route for updating compliance parameters
+    # @webapp.route("/update_param", methods=["POST"])
+    # def update_param():
+    #     reconf_client.update_configuration(request.json)
+    #     return "Updated compliance parameters"
 
     webapp.run(host="0.0.0.0")
 
