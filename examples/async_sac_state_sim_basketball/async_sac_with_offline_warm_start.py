@@ -12,6 +12,8 @@ import tqdm
 from absl import app, flags
 from flax.training import checkpoints
 
+import threading
+
 from agentlace.data.data_store import QueuedDataStore
 from agentlace.trainer import TrainerClient, TrainerServer
 from serl_launcher.utils.launcher import (
@@ -103,13 +105,58 @@ flags.DEFINE_string("data_store_path", None, "Path to save and load data_store."
 flags.DEFINE_boolean("teacher", False, "Is this a teacher agent.")
 flags.DEFINE_boolean("load_offline_data", False, "Load offline data.")
 flags.DEFINE_integer("offline_decay_start", None, "Offline decay start step.")
-flags.DEFINE_integer("offline_decay_end", None, "Offline decay end step.")
-flags.DEFINE_float("offline_ratio", 0.5, "Offline decay begining ratio.")
+flags.DEFINE_integer("offline_decay_steps", None, "Offline decay steps.")
+flags.DEFINE_float("offline_ratio", 0.5, "Offline decay ratio.")
 
 
 def print_green(x):
     return print("\033[92m {}\033[00m".format(x))
 
+import threading
+
+class RatioController:
+    """
+    A simple controller to adjust the ratio of offline data used in training.
+    This is useful for debugging and testing purposes.
+    """
+
+    def __init__(self, FLAGS):
+        self.offline_ratio = FLAGS.offline_ratio
+        self.offline_decay_start = FLAGS.offline_decay_start
+        self.offline_dacay_steps = FLAGS.offline_decay_steps
+        self.learner_steps = FLAGS.learner_steps
+        self.setdecay = 0
+        self._start_input_thread()
+
+    def _input_thread(self):
+        while True and self.setdecay == 0:
+            user_input = input()
+            if user_input.strip().lower() == "decay":
+                self.setdecay = 1
+                print_green("Decay mode activated (setdecay=True)")
+
+    def _start_input_thread(self):
+        thread = threading.Thread(target=self._input_thread, daemon=True)
+        thread.start()
+
+    def get_ratio(self, update_steps):
+        """
+        Get the current ratio of offline data to use in training.
+        """
+        if self.setdecay == 1:
+            self.offline_decay_start = update_steps
+            if self.offline_dacay_steps is None:
+                self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
+        if self.offline_decay_start is None or update_steps < self.offline_decay_start:
+            return self.offline_ratio
+        if self.setdecay != 2:
+            self.setdecay = 2
+            if self.offline_dacay_steps is None:
+                self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
+        if update_steps < self.offline_decay_start + self.offline_dacay_steps:
+            return self.offline_ratio * (self.offline_decay_start + self.offline_dacay_steps - update_steps) / self.offline_dacay_steps
+        else:
+            return 0.0
 
 ##############################################################################
 
@@ -256,6 +303,9 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
         params = params["params"]
         agent = agent.replace(state=agent.state.replace(params=params))
         print_green('Loaded checkpoint from ' + FLAGS.load_checkpoint)
+    
+    if offline_data is not None:
+        ratio_controller = RatioController(FLAGS)
 
     # set up wandb and logging
     wandb_logger = make_wandb_logger(
@@ -319,24 +369,22 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
             batch = next(replay_iterator)
         
         ratio = 0
-        if offline_data is not None and (FLAGS.offline_decay_start is None or update_steps < FLAGS.offline_decay_end):
+        if offline_data is not None:
+            ratio = ratio_controller.get_ratio(update_steps)
             with timer.context("sample_offline_data"):
-                offline_batch = next(offline_iterator)
-                if FLAGS.offline_decay_start is None or update_steps < FLAGS.offline_decay_start:
-                    ratio = FLAGS.offline_ratio
-                else:
-                    ratio = FLAGS.offline_ratio * (FLAGS.offline_decay_end - update_steps) / (FLAGS.offline_decay_end - FLAGS.offline_decay_start)
-                batch = jax.tree_map(
-                    lambda x, y: jnp.concatenate(
-                        [
-                            x[: int(x.shape[0] * (1 - ratio))],
-                            y[: int(y.shape[0] * ratio)],
-                        ],
-                        axis=0,
-                    ),
-                    batch,
-                    offline_batch,
-                )
+                if ratio > 0:
+                    offline_batch = next(offline_iterator)
+                    batch = jax.tree_map(
+                        lambda x, y: jnp.concatenate(
+                            [
+                                x[: int(x.shape[0] * (1 - ratio))],
+                                y[: int(y.shape[0] * ratio)],
+                            ],
+                            axis=0,
+                        ),
+                        batch,
+                        offline_batch,
+                    )
 
         with timer.context("train"):
             agent, update_info = agent.update_high_utd(
@@ -374,8 +422,6 @@ def main(_):
     num_devices = len(devices)
     sharding = jax.sharding.PositionalSharding(devices)
     assert FLAGS.batch_size % num_devices == 0
-    if FLAGS.offline_decay_start is not None and FLAGS.offline_decay_end is None:
-        FLAGS.offline_decay_end = FLAGS.learner_steps
 
     # seed
     rng = jax.random.PRNGKey(FLAGS.seed)
