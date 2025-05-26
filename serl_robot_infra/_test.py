@@ -1,10 +1,11 @@
 import franka_env
 import time
 from franka_env.envs.basketball_env.franka_basketball import FrankaBasketball
+from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
 debug=False
 # debug=True
-record_length=60
+record_length=600
 calib_pos=None
 calib_pos = [
     [(299.1, 319.5), (0, 0)],  # center
@@ -14,8 +15,10 @@ calib_pos = [
     [(309.5, 396), (0, 0.3)],  # right
 ]
 
+config = BasketballEnvConfig()
 
-env = FrankaBasketball(trusted_region=((0,0),(480,640)), calibration_pos=calib_pos, debug=debug, record_length=record_length)
+
+env = FrankaBasketball(config=config, trusted_region=((0,0),(480,640)), calibration_pos=calib_pos, debug=debug, record_length=record_length, )
 print('... OK')
 env.init_cameras()
 

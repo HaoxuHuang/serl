@@ -344,6 +344,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
             q_info = agent.get_q_info(fixed_offline_batch, utd_ratio=FLAGS.utd_ratio)
             agent = jax.block_until_ready(agent)
             q_info = {k: float(v.item()) for k, v in q_info.items()}
+            # print(q_info)
 
             # publish the updated network
             server.publish_network(agent.state.params)
@@ -353,7 +354,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
             wandb_logger.log(
                 {"timer": timer.get_average_times()}, step=update_steps)
             wandb_logger.log(q_info, step=update_steps)
-            wandb_logger.log(ratio, step=update_steps)
+            wandb_logger.log({"offline_ratio": ratio}, step=update_steps)
 
         if FLAGS.checkpoint_period and update_steps % FLAGS.checkpoint_period == 0:
             assert FLAGS.checkpoint_path is not None

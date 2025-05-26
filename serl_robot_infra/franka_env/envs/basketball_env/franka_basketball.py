@@ -5,12 +5,39 @@ import requests
 import copy
 import cv2
 import threading
+import queue
+import matplotlib.pyplot as plt
 from datetime import datetime
 from collections import OrderedDict
 from typing import Dict
 
 from franka_env.utils.rotations import euler_2_quat
 from franka_env.envs.basketball_env.config import BasketballEnvConfig
+
+
+
+class ImageDisplayer(threading.Thread):
+    def __init__(self, queue):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.daemon = True  # make this a daemon thread
+
+
+    def run(self):
+        while True:
+            img_array = self.queue.get()  # retrieve an image from the queue
+            if img_array is None:  # None is our signal to exit
+                break
+
+            # frame = np.concatenate(
+            #     [v for k, v in img_array.items() if "full" not in k], axis=0
+            # )
+
+            
+            # cv2.imshow("RealSense Cameras", img_array)
+            # cv2.waitKey(1)
+            plt.imshow(img_array)
+            plt.show()
 
 
 def print_green(x):
@@ -47,26 +74,33 @@ class FrankaBasketball:
             "calibration_pos", None)
         self.debug = kwargs.pop("debug", False) 
         self.record_length = kwargs.pop("record_length", 30)
+        self.context_length = kwargs.pop("context_length", 9)
         self.target_position = np.array(kwargs.pop(
             "target_position", (0, 0)))
+        self.rec = []
+        self.rec_detection = []
+        self.rec_hit = []
+        self.image_display = queue.Queue()
+        self.image_displayer = ImageDisplayer(self.image_display)
+        self.image_displayer.start()
         
         # safety limit
         self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
         self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
         
         self.action_scale = config.ACTION_SCALE
-        self._TARGET_POSE = config.TARGET_POSE
+        # self._TARGET_POSE = config.TARGET_POSE
         self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
         self.url = config.SERVER_URL
         self.config = config
         self.max_episode_length = max_episode_length
 
         # convert last 3 elements from euler to quat, from size (6,) to (7,)
-        self.resetpos = np.concatenate(
-            [config.RESET_POSE[:3], euler_2_quat(config.RESET_POSE[3:])]
-        )
+        # self.resetpos = np.concatenate(
+        #     [config.RESET_POSE[:3], euler_2_quat(config.RESET_POSE[3:])]
+        # )
 
-        self.currpos = self.resetpos.copy()
+        # self.currpos = self.resetpos.copy()
         self.currvel = np.zeros((6,))
         self.q = np.zeros((7,))
         self.dq = np.zeros((7,))
@@ -131,13 +165,12 @@ class FrankaBasketball:
         Alignment camera frequency 30Hz with policy frequency 50Hz.
         Individual process for camera. Communicate with shared memory or network or whatever.
         """
+        pos_reward = 0.0
         with self.camera_lock:
             if self.camera_reward is not None:
-                reward = self.camera_reward
+                pos_reward = self.camera_reward
                 self.camera_reward = None
-                return reward
-            else:
-                return 0.0
+        return pos_reward
 
     def go_to_rest(self, joint_reset=False):
         # stop
@@ -153,22 +186,26 @@ class FrankaBasketball:
         input("Press enter when you finish picking up the ball and reset joints...")
 
     def reset(self, joint_reset=False, **kwargs):
-        if self.save_video:
-            self.save_video_recording()
+        with self.camera_lock:
+            self.grounded = False
+            self.camera_reward = None
 
-        self.cycle_count += 1
-        if self.cycle_count % self.joint_reset_cycle == 0:
-            self.cycle_count = 0
-            joint_reset = True
+        # if self.save_video:
+        #     self.save_video_recording()
 
-        self.go_to_rest(joint_reset=joint_reset)
-        self._recover()
-        self.curr_path_length = 0
+        # self.cycle_count += 1
+        # if self.cycle_count % self.joint_reset_cycle == 0:
+        #     self.cycle_count = 0
+        #     joint_reset = True
 
-        self._update_currpos()
-        obs = self._get_obs()
+        # self.go_to_rest(joint_reset=joint_reset)
+        # self._recover()
+        # self.curr_path_length = 0
 
-        return obs, {}
+        # self._update_currpos()
+        # obs = self._get_obs()
+
+        # return obs, {}
     
     def save_video_recording(self):
         try:
@@ -217,8 +254,8 @@ class FrankaBasketball:
         # 3) Morphological open+close to remove noise
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         mask = np.array(mask * 255, dtype=np.uint8)
-        mask = cv2.erode(mask, dst=None, kernel=kernel, iterations=2)
-        mask = cv2.dilate(mask, dst=None, kernel=kernel, iterations=2)
+        mask = cv2.erode(mask, dst=None, kernel=kernel, iterations=1)
+        mask = cv2.dilate(mask, dst=None, kernel=kernel, iterations=1)
         # vis.append(mask)
         # plt.imshow(mask)
         # plt.show()
@@ -258,7 +295,7 @@ class FrankaBasketball:
                     # 8) If so, use it as the ball position
                     center = np.array([cx, cy])
         
-        self.rec.append(frame)
+        self.rec.append(hsv)
         if len(self.rec) > self.record_length:
             self.rec.pop(0)
         self.rec_detection.append(mask)
@@ -283,7 +320,7 @@ class FrankaBasketball:
 
         ball_pos is a list of positions. Smooth it with a Gaussian filter. Compute the second derivative of the ball position. Apply a threshold and non-maximum suppression.
         """
-        if len(self.ball_pos) < 7:
+        if len(self.ball_pos) < self.context_length:
             return None, "not enough data"
 
         arr = np.array(self.ball_pos)  # shape (context_length, 2)
@@ -324,6 +361,7 @@ class FrankaBasketball:
         if not self.grounded:
             import copy
             self.rec_hit = copy.deepcopy(self.rec[-self.context_length:])
+        self.image_display.put(self.rec_hit[self.context_length//2])
         return center, "hit ground"
 
     def camera_loop(self):
@@ -459,7 +497,10 @@ class FrankaBasketball:
         self._update_currpos()
         ob = self._get_obs()
         reward = self.compute_reward(ob)
-        done = self.curr_path_length >= self.max_episode_length or reward > 0
+        # done = self.curr_path_length >= self.max_episode_length or reward > 0
+        done = self.curr_path_length >= self.max_episode_length
+        with self.camera_lock:
+            done = done or self.grounded
         del ob['images']    # The images are only used for compute rewards.
         return ob, reward, done, False, {}
     

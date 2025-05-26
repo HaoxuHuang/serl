@@ -8,5 +8,5 @@ python test.py "$@" \
     --port 1145 \
     --random_steps 10 \
     --actor_steps 40000 \
-    --load_checkpoint "/home/drl/Code/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_10-14-27/checkpoint_560000" \
+    --load_checkpoint "/home/pjlab/serl/examples/async_sac_state_sim_basketball/checkpoints/checkpoints_2025-05-25_19-27-42/checkpoint_700000" \
     # --debug
