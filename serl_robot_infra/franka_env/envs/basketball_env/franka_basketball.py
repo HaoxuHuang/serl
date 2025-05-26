@@ -295,7 +295,7 @@ class FrankaBasketball:
                     # 8) If so, use it as the ball position
                     center = np.array([cx, cy])
         
-        self.rec.append(hsv)
+        self.rec.append(cv2.cvtColor(blurred, cv2.COLOR_BGR2RGB))
         if len(self.rec) > self.record_length:
             self.rec.pop(0)
         self.rec_detection.append(mask)
