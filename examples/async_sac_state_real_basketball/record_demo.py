@@ -48,7 +48,7 @@ if __name__ == "__main__":
         raise PermissionError(f"No permission to write to {file_dir}")
 
     while success_count < success_needed:
-        actions = np.zeros((6,))
+        actions = np.zeros((7,))
         next_obs, rew, done, truncated, info = env.step(action=actions)
         if "guidance_action" in info:
             actions = info["guidance_action"]
@@ -67,12 +67,13 @@ if __name__ == "__main__":
         obs = next_obs
 
         if done:
-            success_count += rew
+            success_count += 1 if rew > 0 else 0
             total_count += 1
             print(
                 f"{rew}\tGot {success_count} successes of {total_count} trials. {success_needed} successes needed."
             )
-            pbar.update(rew)
+            input("Press Enter to proceed to next demo...")
+            pbar.update(1 if rew > 0 else 0)
             obs, _ = env.reset()
 
     with open(file_path, "wb") as f:
