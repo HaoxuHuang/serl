@@ -52,7 +52,7 @@ def print_red(x):
     return print("\033[91m{}\033[00m".format(x))
 
 
-class FrankaBasketball:
+class FrankaBasketball(gym.Env):
     def __init__(self, 
                 hz=50,
                 fake_env=False,
@@ -80,16 +80,16 @@ class FrankaBasketball:
         self.rec = []
         self.rec_detection = []
         self.rec_hit = []
-        self.image_display = queue.Queue()
-        self.image_displayer = ImageDisplayer(self.image_display)
-        self.image_displayer.start()
+        if self.debug:
+            self.image_display = queue.Queue()
+            self.image_displayer = ImageDisplayer(self.image_display)
+            self.image_displayer.start()
         
         # safety limit
         self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
         self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
         
         self.action_scale = config.ACTION_SCALE
-        # self._TARGET_POSE = config.TARGET_POSE
         self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
         self.url = config.SERVER_URL
         self.config = config
@@ -100,7 +100,7 @@ class FrankaBasketball:
         #     [config.RESET_POSE[:3], euler_2_quat(config.RESET_POSE[3:])]
         # )
 
-        # self.currpos = self.resetpos.copy()
+        self.currpos = np.zeros((7,))  # tcp pose in xyz + quat
         self.currvel = np.zeros((6,))
         self.q = np.zeros((7,))
         self.dq = np.zeros((7,))
@@ -190,22 +190,22 @@ class FrankaBasketball:
             self.grounded = False
             self.camera_reward = None
 
-        # if self.save_video:
-        #     self.save_video_recording()
+        if self.save_video:
+            self.save_video_recording()
 
-        # self.cycle_count += 1
-        # if self.cycle_count % self.joint_reset_cycle == 0:
-        #     self.cycle_count = 0
-        #     joint_reset = True
+        self.cycle_count += 1
+        if self.cycle_count % self.joint_reset_cycle == 0:
+            self.cycle_count = 0
+            joint_reset = True
 
-        # self.go_to_rest(joint_reset=joint_reset)
-        # self._recover()
-        # self.curr_path_length = 0
+        self.go_to_rest(joint_reset=joint_reset)
+        self._recover()
+        self.curr_path_length = 0
 
-        # self._update_currpos()
-        # obs = self._get_obs()
+        self._update_currpos()
+        obs = self._get_obs()
 
-        # return obs, {}
+        return obs, {}
     
     def save_video_recording(self):
         try:
@@ -361,7 +361,8 @@ class FrankaBasketball:
         if not self.grounded:
             import copy
             self.rec_hit = copy.deepcopy(self.rec[-self.context_length:])
-        self.image_display.put(self.rec_hit[self.context_length//2])
+        if self.debug:
+            self.image_display.put(self.rec_hit[self.context_length//2])
         return center, "hit ground"
 
     def camera_loop(self):
@@ -472,7 +473,6 @@ class FrankaBasketball:
 
         self.currforce[:] = np.array(ps["force"])
         self.currtorque[:] = np.array(ps["torque"])
-        self.currjacobian[:] = np.reshape(np.array(ps["jacobian"]), (6, 7))
 
         self.q[:] = np.array(ps["q"])
         self.dq[:] = np.array(ps["dq"])
@@ -512,11 +512,10 @@ class FrankaBasketball:
         requests.post(self.url + "joint", json=data)
 
     def _get_obs(self) -> dict:
-        images = self.get_im()
         state_observation = {
             "tcp_pos": self.currpos,
             "tcp_vel": self.currvel,
             "joint_pos": self.q,
             "joint_vel": self.dq
         }
-        return copy.deepcopy(dict(images=images, state=state_observation))
+        return copy.deepcopy(dict(state=state_observation))

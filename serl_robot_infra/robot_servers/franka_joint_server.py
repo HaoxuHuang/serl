@@ -13,6 +13,7 @@ from absl import app, flags
 from franka_msgs.msg import ErrorRecoveryActionGoal, FrankaState
 from serl_franka_controllers.msg import ZeroJacobian
 import geometry_msgs.msg as geom_msg
+import sensor_msgs.msg as sensor_msg
 from dynamic_reconfigure.client import Client as ReconfClient
 
 FLAGS = flags.FLAGS
@@ -27,7 +28,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_list(
     "reset_joint_target",
-    [0, 0, 0, -1.9, -0, 2, 0],
+    [0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4],
     "Target joint angles for the robot to reset to",
 )
 
@@ -65,7 +66,7 @@ class FrankaServer:
             [
                 "roslaunch",
                 self.ros_pkg_name,
-                "impedance.launch",
+                "joint_impedance.launch",
                 "robot_ip:=" + self.robot_ip,
                 f"load_gripper:={'true' if self.gripper_type == 'Franka' else 'false'}",
             ],
