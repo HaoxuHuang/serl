@@ -33,11 +33,11 @@ import franka_sim
 from gym.envs.registration import register
 
 
-import basketball_environment
+import basketball_sim_environment
 
 register(
     id="Basket-v0",
-    entry_point="basketball_environment:BasketEnv",
+    entry_point="basketball_sim_environment:BasketEnv",
     max_episode_steps=1000,
 )
 
@@ -47,7 +47,8 @@ FLAGS = flags.FLAGS
 # flags.DEFINE_string("env", "PandaPickCube-v0", "Name of environment.")
 flags.DEFINE_string("env", "Basket-v0", "Name of environment.")
 flags.DEFINE_string("agent", "sac", "Name of agent.")
-flags.DEFINE_string("exp_name", None, "Name of the experiment for wandb logging.")
+flags.DEFINE_string(
+    "exp_name", None, "Name of the experiment for wandb logging.")
 flags.DEFINE_integer("max_traj_length", 100, "Maximum length of trajectory.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_bool("save_model", False, "Whether to save model.")
@@ -55,12 +56,17 @@ flags.DEFINE_integer("batch_size", 256, "Batch size.")
 flags.DEFINE_integer("critic_actor_ratio", 8, "critic to actor update ratio.")
 
 flags.DEFINE_integer("actor_steps", 1000000, "Maximum number of actor steps.")
-flags.DEFINE_integer("learner_steps", 1000000, "Maximum number of learner steps.")
-flags.DEFINE_integer("replay_buffer_capacity", 1000000, "Replay buffer capacity.")
+flags.DEFINE_integer("learner_steps", 1000000,
+                     "Maximum number of learner steps.")
+flags.DEFINE_integer("replay_buffer_capacity", 1000000,
+                     "Replay buffer capacity.")
 
-flags.DEFINE_integer("random_steps", 300, "Sample random actions for this many steps.")
-flags.DEFINE_integer("training_starts", 300, "Training starts after this step.")
-flags.DEFINE_integer("steps_per_update", 30, "Number of steps per update the server.")
+flags.DEFINE_integer("random_steps", 300,
+                     "Sample random actions for this many steps.")
+flags.DEFINE_integer("training_starts", 300,
+                     "Training starts after this step.")
+flags.DEFINE_integer("steps_per_update", 30,
+                     "Number of steps per update the server.")
 
 flags.DEFINE_integer("log_period", 10, "Logging period.")
 flags.DEFINE_integer("eval_period", 2000, "Evaluation period.")
@@ -78,7 +84,8 @@ flags.DEFINE_string("load_checkpoint", None, "Path to load checkpoints.")
 flags.DEFINE_integer(
     "eval_checkpoint_step", 0, "evaluate the policy from ckpt at this step"
 )
-flags.DEFINE_integer("eval_n_trajs", 5, "Number of trajectories for evaluation.")
+flags.DEFINE_integer(
+    "eval_n_trajs", 5, "Number of trajectories for evaluation.")
 
 flags.DEFINE_boolean(
     "debug", False, "Debug mode."
@@ -91,16 +98,20 @@ flags.DEFINE_integer("utd_ratio", 1, "utd_ratio.")
 flags.DEFINE_integer("sleep_time", 0, "Sleep time.")
 
 flags.DEFINE_float("action_scale", 0.2, "Scale applied to agent actions.")
-flags.DEFINE_float("angle_penalty", 1e-5, "Penalty coefficient for joint angles.")
-flags.DEFINE_float("energy_penalty", 1e-4, "Penalty coefficient for energy usage.")
+flags.DEFINE_float("angle_penalty", 1e-5,
+                   "Penalty coefficient for joint angles.")
+flags.DEFINE_float("energy_penalty", 1e-4,
+                   "Penalty coefficient for energy usage.")
 # flags.DEFINE_integer("seed", 0, "Random seed for environment/simulation.")
 flags.DEFINE_float("control_dt", 0.02, "Control timestep (seconds).")
-flags.DEFINE_float("physics_dt", 0.002, "Physics simulation timestep (seconds).")
+flags.DEFINE_float("physics_dt", 0.002,
+                   "Physics simulation timestep (seconds).")
 flags.DEFINE_float("time_limit", 10.0, "Maximum episode duration (seconds).")
 
 flags.DEFINE_float("discount", 0.9999, "Discount.")
 
-flags.DEFINE_string("data_store_path", None, "Path to save and load data_store.")
+flags.DEFINE_string("data_store_path", None,
+                    "Path to save and load data_store.")
 flags.DEFINE_boolean("teacher", False, "Is this a teacher agent.")
 flags.DEFINE_boolean("load_offline_data", False, "Load offline data.")
 flags.DEFINE_integer("offline_decay_start", None, "Offline decay start step.")
@@ -285,7 +296,8 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         client.recv_network_callback(update_params)
 
     if FLAGS.teacher and FLAGS.load_checkpoint != None:
-        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
+        params = checkpoints.restore_checkpoint(
+            FLAGS.load_checkpoint, target=None)
         params = params["params"]
         agent = agent.replace(state=agent.state.replace(params=params))
         print_green("Loaded checkpoint from " + FLAGS.load_checkpoint)
@@ -413,7 +425,8 @@ def learner(
     global LEARNER_FLAG
 
     if FLAGS.load_checkpoint != None:
-        params = checkpoints.restore_checkpoint(FLAGS.load_checkpoint, target=None)
+        params = checkpoints.restore_checkpoint(
+            FLAGS.load_checkpoint, target=None)
         params = params["params"]
         agent = agent.replace(state=agent.state.replace(params=params))
         print_green("Loaded checkpoint from " + FLAGS.load_checkpoint)
@@ -505,8 +518,10 @@ def learner(
                     )
 
         with timer.context("train"):
-            agent, update_info = agent.update_high_utd(batch, utd_ratio=FLAGS.utd_ratio)
-            q_info = agent.get_q_info(fixed_offline_batch, utd_ratio=FLAGS.utd_ratio)
+            agent, update_info = agent.update_high_utd(
+                batch, utd_ratio=FLAGS.utd_ratio)
+            q_info = agent.get_q_info(
+                fixed_offline_batch, utd_ratio=FLAGS.utd_ratio)
             agent = jax.block_until_ready(agent)
             q_info = {k: float(v.item()) for k, v in q_info.items()}
             # print(q_info)
@@ -516,7 +531,8 @@ def learner(
 
         if update_steps % FLAGS.log_period == 0 and wandb_logger:
             wandb_logger.log(update_info, step=update_steps)
-            wandb_logger.log({"timer": timer.get_average_times()}, step=update_steps)
+            wandb_logger.log(
+                {"timer": timer.get_average_times()}, step=update_steps)
             wandb_logger.log(q_info, step=update_steps)
             wandb_logger.log({"offline_ratio": ratio}, step=update_steps)
 
@@ -526,7 +542,7 @@ def learner(
                 FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
             )
 
-        pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar
+        # pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar
         update_steps += 1
 
         if EMERGENCY_FLAG.is_set() or LEARNER_FLAG.is_set():
@@ -622,7 +638,8 @@ def main(_):
     )
 
     if FLAGS.learner:
-        sampling_rng = jax.device_put(sampling_rng, device=sharding.replicate())
+        sampling_rng = jax.device_put(
+            sampling_rng, device=sharding.replicate())
         replay_buffer = make_replay_buffer(
             env,
             capacity=FLAGS.replay_buffer_capacity,
@@ -653,9 +670,12 @@ def main(_):
                 },
                 device=sharding.replicate(),
             )
-            offline_data = populate_data_store(offline_data, [FLAGS.data_store_path])
-            replay_buffer = populate_data_store(replay_buffer, [FLAGS.data_store_path])
-            print_green("Loaded offline data store from " + FLAGS.data_store_path)
+            offline_data = populate_data_store(
+                offline_data, [FLAGS.data_store_path])
+            replay_buffer = populate_data_store(
+                replay_buffer, [FLAGS.data_store_path])
+            print_green("Loaded offline data store from " +
+                        FLAGS.data_store_path)
         else:
             offline_data = None
             offline_iterator = None

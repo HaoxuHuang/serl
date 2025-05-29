@@ -37,7 +37,8 @@ if __name__ == "__main__":
     pbar = tqdm(total=success_needed)
     uuid = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     file_name = f"./bc_demos/basketball_{success_needed}_demos_{uuid}.pkl"
-    file_dir = os.path.dirname(os.path.realpath(__file__))  # same dir as this script
+    file_dir = os.path.dirname(os.path.realpath(
+        __file__))  # same dir as this script
     file_path = os.path.join(file_dir, file_name)
 
     if not os.path.exists(file_dir):
@@ -55,11 +56,11 @@ if __name__ == "__main__":
 
         transition = copy.deepcopy(
             dict(
-                observations=obs,
+                observations=obs['state'],
                 actions=actions,
-                next_observations=next_obs,
+                next_observations=next_obs['state'],
                 rewards=rew,
-                masks=1.0 - done,
+                masks=np.array(1.0 - done, dtype=np.float32),
                 dones=done,
             )
         )
