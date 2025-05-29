@@ -35,7 +35,7 @@ import basketball_sim_environment
 
 register(
     id="Basket-v0",
-    entry_point="basketball_environment:BasketEnv",
+    entry_point="basketball_sim_environment:BasketEnv",
     max_episode_steps=1000,
 )
 from basketball_env_monitor import BasketMonitorWrapper
