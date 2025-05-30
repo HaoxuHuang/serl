@@ -164,6 +164,7 @@ listener = pynput.keyboard.Listener(
 listener.start()
 
 
+import math
 class RatioController:
     """
     A simple controller to adjust the ratio of offline data used in training.
@@ -181,7 +182,7 @@ class RatioController:
         if self.set_decay == 0:
             self.set_decay = 1
 
-    def get_ratio(self, update_steps):
+    def get_coef(self, update_steps):
         """
         Get the current ratio of offline data to use in training.
         """
@@ -190,20 +191,21 @@ class RatioController:
             if self.offline_dacay_steps is None:
                 self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
         if self.offline_decay_start is None or update_steps < self.offline_decay_start:
-            return self.offline_ratio
+            return 1
         if self.set_decay != 2:
             self.set_decay = 2
             if self.offline_dacay_steps is None:
                 self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
         if update_steps < self.offline_decay_start + self.offline_dacay_steps:
             return (
-                self.offline_ratio
-                * (self.offline_decay_start + self.offline_dacay_steps - update_steps)
-                / self.offline_dacay_steps
-            )
+                self.offline_decay_start + self.offline_dacay_steps - update_steps
+            ) / self.offline_dacay_steps
         else:
             return 0.0
 
+    def get_ratio(self, update_steps):
+        coef = self.get_coef(update_steps)
+        return self.offline_ratio * math.floor(coef * 50) / 50
 
 ##############################################################################
 

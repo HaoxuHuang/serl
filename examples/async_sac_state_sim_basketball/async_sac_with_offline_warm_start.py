@@ -11,6 +11,7 @@ import numpy as np
 import tqdm
 from absl import app, flags
 from flax.training import checkpoints
+import math
 
 import threading
 
@@ -139,7 +140,7 @@ class RatioController:
         thread = threading.Thread(target=self._input_thread, daemon=True)
         thread.start()
 
-    def get_ratio(self, update_steps):
+    def get_coef(self, update_steps):
         """
         Get the current ratio of offline data to use in training.
         """
@@ -148,15 +149,19 @@ class RatioController:
             if self.offline_dacay_steps is None:
                 self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
         if self.offline_decay_start is None or update_steps < self.offline_decay_start:
-            return self.offline_ratio
+            return 1
         if self.setdecay != 2:
             self.setdecay = 2
             if self.offline_dacay_steps is None:
                 self.offline_dacay_steps = self.learner_steps - self.offline_decay_start
         if update_steps < self.offline_decay_start + self.offline_dacay_steps:
-            return self.offline_ratio * (self.offline_decay_start + self.offline_dacay_steps - update_steps) / self.offline_dacay_steps
+            return (self.offline_decay_start + self.offline_dacay_steps - update_steps) / self.offline_dacay_steps
         else:
             return 0.0
+    
+    def get_ratio(self, update_steps):
+        coef = self.get_coef(update_steps)
+        return self.offline_ratio * math.floor(coef * 50) / 50
 
 ##############################################################################
 
@@ -377,8 +382,8 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
                     batch = jax.tree_map(
                         lambda x, y: jnp.concatenate(
                             [
-                                x[: int(x.shape[0] * (1 - ratio))],
-                                y[: x.shape[0] - int(x.shape[0] * (1 - ratio))],
+                                x[: y.shape[0] - int(y.shape[0] * ratio)],
+                                y[: int(y.shape[0] * ratio)],
                             ],
                             axis=0,
                         ),

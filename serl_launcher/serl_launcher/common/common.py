@@ -219,6 +219,80 @@ class JaxRLTrainState(struct.PyTreeNode):
             return self.apply_gradients(grads=grads), aux
         else:
             return self.apply_gradients(grads=grads_and_aux)
+        
+    def apply_loss_fns_gradient(
+        self, loss_fns: Any, pmap_axis: str = None, has_aux: bool = False
+    ) -> Union["JaxRLTrainState", Tuple["JaxRLTrainState", Any]]:
+        """
+        Convenience method to compute gradients based on `self.params` and apply
+        them using `apply_gradients`. `loss_fns` must have the same structure as
+        `txs`, and each leaf must be a function that takes two arguments:
+        `params` and `rng`.
+
+        This method automatically provides fresh rng to each loss function and
+        updates this train state's internal rng key.
+
+        Args:
+            loss_fns: loss function or pytree of loss functions with same
+                structure as `self.txs`. Each loss function must take `params`
+                as the first argument and `rng` as the second argument, and return
+                a scalar value.
+            pmap_axis: if not None, gradients (and optionally auxiliary values)
+                will be averaged over this axis
+            has_aux: if True, each `loss_fn` returns a tuple of (loss, aux) where
+                `aux` is a pytree of auxiliary values to be returned by this
+                method.
+
+        Returns:
+            If `has_aux` is True, returns a tuple of (new_train_state, aux).
+            Otherwise, returns the new train state.
+        """
+        # create a pytree of rngs with the same structure as `loss_fns`
+        treedef = jax.tree_util.tree_structure(loss_fns)
+        new_rng, *rngs = jax.random.split(self.rng, treedef.num_leaves + 1)
+        rngs = jax.tree_util.tree_unflatten(treedef, rngs)
+
+        # compute gradients
+        grads_and_aux = jax.tree_map(
+            lambda loss_fn, rng: jax.grad(loss_fn, has_aux=has_aux)(self.params, rng),
+            loss_fns,
+            rngs,
+        )
+
+        # update rng state
+        self = self.replace(rng=new_rng)
+
+        # average across devices if necessary
+        if pmap_axis is not None:
+            grads_and_aux = jax.lax.pmean(grads_and_aux, axis_name=pmap_axis)
+
+        # if has_aux:
+        #     grads = jax.tree_map(lambda _, x: x[0], loss_fns, grads_and_aux)
+        #     aux = jax.tree_map(lambda _, x: x[1], loss_fns, grads_and_aux)
+        #     return self.apply_gradients(grads=grads), aux
+        # else:
+        #     return self.apply_gradients(grads=grads_and_aux)
+
+        if has_aux:
+            grads = jax.tree_map(lambda _, x: x[0], loss_fns, grads_and_aux)
+            aux = jax.tree_map(lambda _, x: x[1], loss_fns, grads_and_aux)
+        else:
+            grads = grads_and_aux
+            aux = None
+
+        # Compute global gradient norm
+        grad_squares = [
+            jnp.sum(jnp.square(g)) for g in jax.tree_leaves(grads) if g is not None
+        ]
+        grad_norm = jnp.sqrt(jnp.sum(jnp.stack(grad_squares)))
+
+        # Apply gradients
+        new_state = self.apply_gradients(grads=grads)
+
+        if has_aux:
+            return new_state, aux, grad_norm
+        else:
+            return new_state
 
     @classmethod
     def create(
