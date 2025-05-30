@@ -7,6 +7,7 @@ import cv2
 import threading
 import queue
 import matplotlib.pyplot as plt
+import pygame
 from datetime import datetime
 from collections import OrderedDict
 from typing import Dict
@@ -15,13 +16,11 @@ from franka_env.utils.rotations import euler_2_quat
 from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
 
-
 class ImageDisplayer(threading.Thread):
     def __init__(self, queue):
         threading.Thread.__init__(self)
         self.queue = queue
         self.daemon = True  # make this a daemon thread
-
 
     def run(self):
         while True:
@@ -29,15 +28,28 @@ class ImageDisplayer(threading.Thread):
             if img_array is None:  # None is our signal to exit
                 break
 
-            # frame = np.concatenate(
-            #     [v for k, v in img_array.items() if "full" not in k], axis=0
-            # )
+            # initialize pygame on first image
+            if not hasattr(self, "_pygame_inited"):
+                pygame.init()
+                h, w = img_array.shape[:2]
+                self.screen = pygame.display.set_mode((w, h))
+                pygame.display.set_caption("Camera View")
+                self.clock = pygame.time.Clock()
+                self._pygame_inited = True
 
-            
-            # cv2.imshow("RealSense Cameras", img_array)
-            # cv2.waitKey(1)
-            plt.imshow(img_array)
-            plt.show()
+            # handle pygame events (e.g. window close)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+
+            # pygame expects (width, height, channels) ordering
+            surface = pygame.surfarray.make_surface(img_array.swapaxes(0, 1))
+
+            # draw and update
+            self.screen.blit(surface, (0, 0))
+            pygame.display.flip()
+            self.clock.tick(30)  # limit to ~30 FPS
 
 
 def print_green(x):
@@ -53,13 +65,15 @@ def print_red(x):
 
 
 class FrankaBasketball(gym.Env):
-    def __init__(self, 
-                hz=50,
-                fake_env=False,
-                save_video=False,
-                config: BasketballEnvConfig = BasketballEnvConfig(),
-                max_episode_length=1000, 
-                **kwargs):
+    def __init__(self,
+                 angle_penalty: float = 0.00001,
+                 energy_penalty: float = 0.0001,
+                 hz=50,
+                 fake_env=False,
+                 save_video=False,
+                 config: BasketballEnvConfig = None,
+                 max_episode_length=1000,
+                 **kwargs):
         self.camera_lock = threading.Lock()
         self.camera_running = False
         self.camera_loop_thread = None
@@ -72,7 +86,7 @@ class FrankaBasketball(gym.Env):
             "trusted_region", ((0, 0), (480, 640)))
         self.calibration_pos = kwargs.pop(
             "calibration_pos", None)
-        self.debug = kwargs.pop("debug", False) 
+        self.debug = kwargs.pop("debug", False)
         self.record_length = kwargs.pop("record_length", 30)
         self.context_length = kwargs.pop("context_length", 9)
         self.target_position = np.array(kwargs.pop(
@@ -80,15 +94,19 @@ class FrankaBasketball(gym.Env):
         self.rec = []
         self.rec_detection = []
         self.rec_hit = []
+        self.angle_penalty = angle_penalty
+        self.energy_penalty = energy_penalty
         if self.debug:
             self.image_display = queue.Queue()
             self.image_displayer = ImageDisplayer(self.image_display)
             self.image_displayer.start()
-        
+
         # safety limit
-        self.joint_bounding_box_low = [-2.89, -1.76, -2.89, -3.0, -2.89, 0, -2.89]
-        self.joint_bounding_box_high = [2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
-        
+        self.joint_bounding_box_low = [-2.89, -
+                                       1.76, -2.89, -3.0, -2.89, 0, -2.89]
+        self.joint_bounding_box_high = [
+            2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
+
         self.action_scale = config.ACTION_SCALE
         self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
         self.url = config.SERVER_URL
@@ -161,18 +179,20 @@ class FrankaBasketball(gym.Env):
 
         print("Initialized Franka")
 
-    def compute_reward(self, obs):
+    def compute_reward(self, action, obs):
         """
         Reward from camera image.
         Alignment camera frequency 30Hz with policy frequency 50Hz.
         Individual process for camera. Communicate with shared memory or network or whatever.
         """
-        pos_reward = 0.0
+        pos_rew = 0.0
         with self.camera_lock:
             if self.camera_reward is not None:
-                pos_reward = self.camera_reward
+                pos_rew = self.camera_reward
                 self.camera_reward = None
-        return pos_reward
+        angle_rew = 0.0
+        energy_rew = -self.energy_penalty * np.linalg.norm(action)
+        return pos_rew + angle_rew + energy_rew
 
     def go_to_rest(self, joint_reset=False):
         # stop
@@ -209,7 +229,7 @@ class FrankaBasketball(gym.Env):
             self.recording_frames.clear()
             print('Camera reset.')
         return obs, {}
-    
+
     def save_video_recording(self):
         try:
             if len(self.recording_frames):
@@ -274,7 +294,7 @@ class FrankaBasketball(gym.Env):
         # plt.imshow(vis[3])
         # plt.tight_layout()
         # plt.show()
-        
+
         # self.rec.append(mask)
 
         # 4) Find contours in the mask
@@ -297,7 +317,7 @@ class FrankaBasketball(gym.Env):
                         self.trusted_region[0][1] <= cy <= self.trusted_region[1][1]):
                     # 8) If so, use it as the ball position
                     center = np.array([cx, cy])
-        
+
         self.rec.append(cv2.cvtColor(blurred, cv2.COLOR_BGR2RGB))
         if len(self.rec) > self.record_length:
             self.rec.pop(0)
@@ -340,10 +360,10 @@ class FrankaBasketball(gym.Env):
         acc = np.gradient(vel, axis=0)               # shape (context_length,2)
 
         # Take the center index (self.context_length//2)
-        center_acc = acc[self.context_length//2]
+        center_acc = acc[self.context_length // 2]
         mag = np.linalg.norm(center_acc)
         if self.debug:
-            print(f'[{len(self.rec)}] Acceleration: '+str(mag))
+            print(f'[{len(self.rec)}] Acceleration: ' + str(mag))
 
         # Threshold on magnitude
         if mag < self.second_derivative_range[0] or mag > self.second_derivative_range[2]:
@@ -351,12 +371,13 @@ class FrankaBasketball(gym.Env):
 
         # # Non‐max suppression against neighbors (self.context_length//2-1 and self.context_length//2+1)
         if mag < self.second_derivative_range[1]:
-            neighbor_mags = [np.linalg.norm(acc[self.context_length//2-1]), np.linalg.norm(acc[self.context_length//2+1])]
+            neighbor_mags = [np.linalg.norm(
+                acc[self.context_length // 2 - 1]), np.linalg.norm(acc[self.context_length // 2 + 1])]
             if mag < max(neighbor_mags):
                 return None, "not maximum"
 
         # Calibrate the position
-        center = self.ball_pos[self.context_length//2]
+        center = self.ball_pos[self.context_length // 2]
         center = np.array(list(center) + [1])
         center = np.dot(self.calibration_matrix, center)
         center = np.array(
@@ -366,7 +387,7 @@ class FrankaBasketball(gym.Env):
             import copy
             self.rec_hit = copy.deepcopy(self.rec[-self.context_length:])
         if self.debug:
-            self.image_display.put(self.rec_hit[self.context_length//2])
+            self.image_display.put(self.rec_hit[self.context_length // 2])
         return center, "hit ground"
 
     def camera_loop(self):
@@ -389,9 +410,11 @@ class FrankaBasketball(gym.Env):
                     center = np.dot(self.calibration_matrix, center)
                     center = np.array(
                         [center[0] / center[2], center[1] / center[2]]) - self.target_position
-                    print_yellow(f'[{len(self.rec)}] ' + str(capture_pos) + ' / ' + str(center) + ' ' + str(info))
+                    print_yellow(
+                        f'[{len(self.rec)}] ' + str(capture_pos) + ' / ' + str(center) + ' ' + str(info))
                 else:
-                    print_yellow(f'[{len(self.rec)}] ' + str(capture_pos) + ' ' + str(info))
+                    print_yellow(f'[{len(self.rec)}] ' +
+                                 str(capture_pos) + ' ' + str(info))
 
             contact_pos, info = self.hit_ground()
             if contact_pos is not None:
@@ -417,14 +440,16 @@ class FrankaBasketball(gym.Env):
         if self.camera_loop_thread is not None:
             self.close_cameras()
 
-        self.cap = cv2.VideoCapture('/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0', cv2.CAP_V4L2)
+        self.cap = cv2.VideoCapture(
+            '/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0', cv2.CAP_V4L2)
         if not self.cap.isOpened():
             raise RuntimeError("Unable to open camera.")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        self.region_mask = np.  zeros([480,640], dtype=np.bool_)
-        self.region_mask[self.trusted_region[0][0]:self.trusted_region[1][0], self.trusted_region[0][1]:self.trusted_region[1][1]] = True
+        self.region_mask = np.  zeros([480, 640], dtype=np.bool_)
+        self.region_mask[self.trusted_region[0][0]:self.trusted_region[1]
+                         [0], self.trusted_region[0][1]:self.trusted_region[1][1]] = True
         # print(self.region_mask.shape)
         # plt.imshow(self.trusted_region*255, vmin=0, vmax=255, cmap='gray')
         # plt.show()
@@ -470,7 +495,7 @@ class FrankaBasketball(gym.Env):
             pose, self.joint_bounding_box_low, self.joint_bounding_box_high
         )
         return pose
-    
+
     def _update_currpos(self):
         """
         Internal function to get the latest state of the robot and its gripper.
@@ -487,7 +512,6 @@ class FrankaBasketball(gym.Env):
 
         # self.curr_gripper_pos = np.array(ps["gripper_pos"])
 
-    
     def step(self, action: np.ndarray) -> tuple:
         """standard gym step function."""
         start_time = time.time()
@@ -504,13 +528,13 @@ class FrankaBasketball(gym.Env):
 
         self._update_currpos()
         ob = self._get_obs()
-        reward = self.compute_reward(ob)
+        reward = self.compute_reward(action, ob)
         # done = self.curr_path_length >= self.max_episode_length or reward > 0
         done = self.curr_path_length >= self.max_episode_length
         with self.camera_lock:
             done = done or self.grounded
         return ob, reward, done, False, {}
-    
+
     def _send_joint_command(self, joint: np.ndarray):
         """Internal function to send joint command to the robot."""
         self._recover()
