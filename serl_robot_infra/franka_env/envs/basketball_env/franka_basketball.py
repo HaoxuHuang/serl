@@ -75,6 +75,13 @@ class FrankaBasketball(gym.Env):
                  save_video=False,
                  config: BasketballEnvConfig = BasketballEnvConfig(),
                  max_episode_length=1000,
+                 calibration_pos= [
+                    [(167.3, 309.8), (0, 0)],  # center
+                    [(126.2, 277.3), (-3, 0)],  # up
+                    [(220.5, 346.4), (3, 0)],  # down
+                    [(194.6, 241.5), (0, -3)],  # left
+                    [(138.8, 373.6), (0, 3)],  # right
+                 ],
                  **kwargs):
         self.camera_lock = threading.Lock()
         self.camera_running = False
@@ -86,8 +93,7 @@ class FrankaBasketball(gym.Env):
             "second_derivative_range", (9, 20, 100))
         self.trusted_region = kwargs.pop(
             "trusted_region", ((0, 0), (480, 640)))
-        self.calibration_pos = kwargs.pop(
-            "calibration_pos", None)
+        self.calibration_pos =calibration_pos
         self.debug = kwargs.pop("debug", False)
         self.record_length = kwargs.pop("record_length", 30)
         self.context_length = kwargs.pop("context_length", 9)
@@ -166,7 +172,6 @@ class FrankaBasketball(gym.Env):
                         "tcp_pose": gym.spaces.Box(
                             -np.inf, np.inf, shape=(7,)
                         ),  # xyz + quat
-                        "tcp_vel": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
                         "joint_pos": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
                         "joint_vel": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
                     }
@@ -429,7 +434,7 @@ class FrankaBasketball(gym.Env):
                 with self.camera_lock:
                     if not self.grounded:
                         self.grounded = True
-                        self.camera_reward = 2 - np.linalg.norm(contact_pos)
+                        self.camera_reward = 20 - np.linalg.norm(contact_pos)
                         print_green(f'Reward: {self.camera_reward}')
 
             with self.camera_lock:
@@ -552,7 +557,6 @@ class FrankaBasketball(gym.Env):
     def _get_obs(self) -> dict:
         state_observation = {
             "tcp_pose": self.currpos,
-            "tcp_vel": self.currvel,
             "joint_pos": self.q,
             "joint_vel": self.dq
         }

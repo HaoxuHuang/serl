@@ -18,16 +18,10 @@ from serl_launcher.wrappers.chunking import ChunkingWrapper
 from serl_launcher.networks.reward_classifier import load_classifier_func
 import jax
 
-calib_pos = [
-    [(229.7, 277.3), (0, 0)],  # center
-    [(199.9, 328.4), (-0.3, 0)],  # up
-    [(260.3, 222.2), (0.3, 0)],  # down
-    [(197.2, 236.8), (0, -0.3)],  # left
-    [(266.3, 324.4), (0, 0.3)],  # right
-]
+
 
 if __name__ == "__main__":
-    env = gym.make("FrankaBasketball-State-v0", calibration_pos=calib_pos, save_video=True)
+    env = gym.make("FrankaBasketball-State-v0", save_video=True)
     env = HandGuidance(env)
     env = SERLObsWrapper(env)
     image_keys = [k for k in env.observation_space.keys() if "state" not in k]
@@ -36,6 +30,7 @@ if __name__ == "__main__":
     rng, key = jax.random.split(rng)
 
     obs, _ = env.reset()
+    print("Start new demo")
 
     transitions = []
     success_count = 0
@@ -83,6 +78,7 @@ if __name__ == "__main__":
             input("Press Enter to proceed to next demo...")
             pbar.update(1 if rew > 0 else 0)
             obs, _ = env.reset()
+            print("Start new demo")
 
     with open(file_path, "wb") as f:
         pkl.dump(transitions, f)
