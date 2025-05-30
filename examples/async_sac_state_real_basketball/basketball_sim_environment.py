@@ -88,9 +88,9 @@ class BasketEnv(MujocoGymEnv):
                         "panda/tcp_pos": spaces.Box(
                             -np.inf, np.inf, shape=(7,), dtype=np.float32
                         ),
-                        "panda/tcp_vel": spaces.Box(
-                            -np.inf, np.inf, shape=(6,), dtype=np.float32
-                        ),
+                        # "panda/tcp_vel": spaces.Box(
+                        #     -np.inf, np.inf, shape=(6,), dtype=np.float32
+                        # ),
                         # "panda/gripper_pos": spaces.Box(
                         #     -np.inf, np.inf, shape=(1,), dtype=np.float32
                         # ),
@@ -226,11 +226,11 @@ class BasketEnv(MujocoGymEnv):
         obs["state"]["panda/tcp_pos"][:3] = tcp_pos.astype(np.float32)
         obs["state"]["panda/tcp_pos"][3:7] = tcp_quat.astype(np.float32)
 
-        obs["state"]["panda/tcp_vel"] = np.zeros((6,), np.float32)
-        tcp_vel = self._data.sensor("panda/hand_vel").data
-        tcp_angvel = self._data.sensor("panda/hand_angvel").data
-        obs["state"]["panda/tcp_vel"][:3] = tcp_vel.astype(np.float32)
-        obs["state"]["panda/tcp_vel"][3:6] = tcp_angvel.astype(np.float32)
+        # obs["state"]["panda/tcp_vel"] = np.zeros((6,), np.float32)
+        # tcp_vel = self._data.sensor("panda/hand_vel").data
+        # tcp_angvel = self._data.sensor("panda/hand_angvel").data
+        # obs["state"]["panda/tcp_vel"][:3] = tcp_vel.astype(np.float32)
+        # obs["state"]["panda/tcp_vel"][3:6] = tcp_angvel.astype(np.float32)
 
         # gripper_pos = np.array(
         #     self._data.ctrl[self._ctrl_id] / 255, dtype=np.float32

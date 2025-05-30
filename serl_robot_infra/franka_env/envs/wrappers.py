@@ -100,6 +100,16 @@ class BinaryRewardClassifierWrapper(gym.Wrapper):
         rew += success
         done = done or success
         return obs, rew, done, truncated, info
+    
+
+
+class ArrayObsWrapper(gym.ObservationWrapper):
+    def observation(self, observation):
+        obs_array = []
+        for k, v in observation.items():
+            obs_array.append(v)
+        obs_array = np.concatenate(obs_array)
+        return obs_array
 
 
 class ZOnlyWrapper(gym.ObservationWrapper):

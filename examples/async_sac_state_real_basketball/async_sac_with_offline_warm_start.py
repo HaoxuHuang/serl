@@ -35,6 +35,12 @@ from gym.envs.registration import register
 
 import basketball_sim_environment
 
+from franka_env.envs.wrappers import (
+    HandGuidance,
+    ArrayObsWrapper
+)
+from serl_launcher.wrappers.serl_obs_wrappers import SERLObsWrapper
+
 register(
     id="Basket-v0",
     entry_point="basketball_sim_environment:BasketEnv",
@@ -141,15 +147,15 @@ def pause_callback(key):
     global EMERGENCY_FLAG
     try:
         # chosen a rarely used key to avoid conflicts. this listener is always on, even when the program is not in focus
-        if key == pynput.keyboard.Key.pause:
+        if key == pynput.keyboard.Key.f1:
             print("Emergency.")
             # set the PAUSE FLAG to pause the actor/learner loop
             EMERGENCY_FLAG.set()
-        elif key == pynput.keyboard.Key.esc:
+        elif key == pynput.keyboard.Key.f2:
             print("Actor interrupted")
             # set the PAUSE FLAG to pause the actor loop
             ACTOR_FLAG.set()
-        elif key == pynput.keyboard.Key.f12:
+        elif key == pynput.keyboard.Key.f3:
             print("Learner interrupted")
             # set the PAUSE FLAG to pause the learner loop
             LEARNER_FLAG.set()
@@ -301,6 +307,9 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         params = checkpoints.restore_checkpoint(
             FLAGS.load_checkpoint, target=None)
         params = params["params"]
+        # with open("log.txt", "w") as f:
+        print(params)
+        print(agent.state)
         agent = agent.replace(state=agent.state.replace(params=params))
         print_green("Loaded checkpoint from " + FLAGS.load_checkpoint)
 
@@ -319,12 +328,22 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                 actions = env.action_space.sample()
             else:
                 sampling_rng, key = jax.random.split(sampling_rng)
-                actions = agent.sample_actions(
-                    observations=jax.device_put(obs),
-                    seed=key,
-                    deterministic=False,
-                )
+                # if FLAGS.teacher:
+                if False:
+                    actions = agent.sample_actions(
+                        observations=jax.device_put(obs),
+                        argmax=True,
+                    )
+                else:
+                    actions = agent.sample_actions(
+                        observations=jax.device_put(obs),
+                        seed=key,
+                        deterministic=False,
+                    )
                 actions = np.asarray(jax.device_get(actions))
+                print(obs)
+                print(actions)
+                print(actions.dtype)
 
         # Step environment
         with timer.context("step_env"):
@@ -594,42 +613,47 @@ def main(_):
     rng = jax.random.PRNGKey(FLAGS.seed)
 
     # create env and load dataset
-    if FLAGS.render:
-        env = gym.make(
-            FLAGS.env,
-            render_mode="human",
-            action_scale=FLAGS.action_scale,
-            angle_penalty=FLAGS.angle_penalty,
-            energy_penalty=FLAGS.energy_penalty,
-            seed=FLAGS.seed,
-            control_dt=FLAGS.control_dt,
-            physics_dt=FLAGS.physics_dt,
-            time_limit=FLAGS.time_limit,
-        )
+    # if FLAGS.render:
+    #     env = gym.make(
+    #         FLAGS.env,
+    #         render_mode="human",
+    #         action_scale=FLAGS.action_scale,
+    #         angle_penalty=FLAGS.angle_penalty,
+    #         energy_penalty=FLAGS.energy_penalty,
+    #         seed=FLAGS.seed,
+    #         control_dt=FLAGS.control_dt,
+    #         physics_dt=FLAGS.physics_dt,
+    #         time_limit=FLAGS.time_limit,
+    #     )
 
-    else:
-        env = gym.make(
-            FLAGS.env,
-            action_scale=FLAGS.action_scale,
-            angle_penalty=FLAGS.angle_penalty,
-            energy_penalty=FLAGS.energy_penalty,
-            seed=FLAGS.seed,
-            control_dt=FLAGS.control_dt,
-            physics_dt=FLAGS.physics_dt,
-            time_limit=FLAGS.time_limit,
-        )
+    # else:
+    #     env = gym.make(
+    #         FLAGS.env,
+    #         action_scale=FLAGS.action_scale,
+    #         angle_penalty=FLAGS.angle_penalty,
+    #         energy_penalty=FLAGS.energy_penalty,
+    #         seed=FLAGS.seed,
+    #         control_dt=FLAGS.control_dt,
+    #         physics_dt=FLAGS.physics_dt,
+    #         time_limit=FLAGS.time_limit,
+    #     )
 
-    if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
-        env = gym.wrappers.FlattenObservation(env)
+    # if FLAGS.env == "PandaPickCube-v0" or FLAGS.env == "Basket-v0":
+    #     env = gym.wrappers.FlattenObservation(env)
 
-    if FLAGS.debug:
-        env = BasketMonitorWrapper(env)
+    # if FLAGS.debug:
+    #     env = BasketMonitorWrapper(env)
+
+    env = gym.make("FrankaBasketball-State-v0", save_video=True)
+    env = HandGuidance(env)
+    env = SERLObsWrapper(env)
+    env = ArrayObsWrapper(env)
 
     rng, sampling_rng = jax.random.split(rng)
     agent: SACAgent = make_sac_agent(
         seed=FLAGS.seed,
         discount=FLAGS.discount,
-        sample_obs=env.observation_space.sample(),
+        sample_obs=env.observation_space.sample()['state'],
         sample_action=env.action_space.sample(),
     )
 
