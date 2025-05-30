@@ -276,7 +276,11 @@ class SACAgent(flax.struct.PyTreeNode):
         for key in loss_fns.keys() - networks_to_update:
             loss_fns[key] = lambda params, rng: (0.0, {})
 
-        new_state, info = self.state.apply_loss_fns(
+        # new_state, info = self.state.apply_loss_fns(
+        #     loss_fns, pmap_axis=pmap_axis, has_aux=True
+        # )
+
+        new_state, info, grad_norm = self.state.apply_loss_fns_gradient(
             loss_fns, pmap_axis=pmap_axis, has_aux=True
         )
 
@@ -296,6 +300,7 @@ class SACAgent(flax.struct.PyTreeNode):
             ):
                 info[f"{name}_lr"] = opt_state.hyperparams["learning_rate"]
 
+        info["grad_norm"] = grad_norm
         return self.replace(state=new_state), info
 
     @partial(jax.jit, static_argnames=("argmax",))
@@ -595,7 +600,6 @@ class SACAgent(flax.struct.PyTreeNode):
 
         return agent, infos
 
-
     @partial(jax.jit, static_argnames=("utd_ratio",))
     def get_q_info(self, batch: Batch, utd_ratio: int):
         """
@@ -615,8 +619,10 @@ class SACAgent(flax.struct.PyTreeNode):
         minibatches = jax.tree_map(make_minibatch, batch)
 
         # scan body: data is a tuple of one element (the minibatch)
-        def scan_body(carry: Tuple[jnp.ndarray, jnp.ndarray], data: Tuple[Batch]):
-            q_acc, lp_acc = carry
+        def scan_body(
+            carry: Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray], data: Tuple[Batch]
+        ):
+            q_acc, lp_acc, qa_acc = carry
             (minibatch,) = data  # unpack the single minibatch
 
             # 1) Q-value sums over this minibatch
@@ -636,11 +642,20 @@ class SACAgent(flax.struct.PyTreeNode):
             )
             lp_sum = dist.log_prob(minibatch["actions"]).sum()
 
-            return (q_acc + q_sum, lp_acc + lp_sum), None
+            # 3) Q-value of policy actions sum over this minibatch
+            qa = self.forward_critic(
+                minibatch["observations"],
+                dist.mode(),
+                rng=None,
+                train=False,
+            )
+            qa_sum = qa.mean(axis=0).sum()
+
+            return (q_acc + q_sum, lp_acc + lp_sum, qa_acc + qa_sum), None
 
         # Run the scan over the utd_ratio chunks
-        init = (0.0, 0.0)
-        (total_q, total_lp), _ = jax.lax.scan(
+        init = (0.0, 0.0, 0.0)
+        (total_q, total_lp, total_qa), _ = jax.lax.scan(
             scan_body,
             init,
             (minibatches,),  # note the comma: xs is a tuple of one pytree
@@ -649,6 +664,6 @@ class SACAgent(flax.struct.PyTreeNode):
         # Compute batch-level means
         q_mean = total_q / batch_size
         logp_mean = total_lp / batch_size
+        total_qa = total_qa / batch_size
 
-        return {"q_mean": q_mean, "logp_mean": logp_mean}
-
+        return {"q_mean": q_mean, "logp_mean": logp_mean, "qa_mean": total_qa}
