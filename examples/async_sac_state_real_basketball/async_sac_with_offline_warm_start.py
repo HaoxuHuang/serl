@@ -510,7 +510,7 @@ def learner(
                     batch = jax.tree_map(
                         lambda x, y: jnp.concatenate(
                             [
-                                x[: int(x.shape[0] * (1 - ratio))],
+                                x[: y.shape[0] - int(y.shape[0] * ratio)],
                                 y[: int(y.shape[0] * ratio)],
                             ],
                             axis=0,
