@@ -31,17 +31,20 @@ flags.DEFINE_list(
     [0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4],
     "Target joint angles for the robot to reset to",
 )
-
+flags.DEFINE_string(
+    "control_mode", "default", "The control mode to use: default, human"
+)
 
 class FrankaJointServer:
     """Handles the starting and stopping of the impedance controller
     (as well as backup) joint recovery policy."""
 
-    def __init__(self, robot_ip, gripper_type, ros_pkg_name, reset_joint_target):
+    def __init__(self, robot_ip, gripper_type, ros_pkg_name, reset_joint_target, control_mode):
         self.robot_ip = robot_ip
         self.ros_pkg_name = ros_pkg_name
         self.reset_joint_target = reset_joint_target
         self.gripper_type = gripper_type
+        self.control_mode = control_mode
         # Franka Panda joint names
         self.joint_names = [
             'panda_joint1', 'panda_joint2', 'panda_joint3', 'panda_joint4',
@@ -72,6 +75,7 @@ class FrankaJointServer:
                 "joint_impedance.launch",
                 "robot_ip:=" + self.robot_ip,
                 f"load_gripper:={'true' if self.gripper_type == 'Franka' else 'false'}",
+                "control_mode:=" + self.control_mode,
             ],
             stdout=subprocess.PIPE,
         )
@@ -169,13 +173,16 @@ class FrankaJointServer:
             self.vel = self.jacobian @ self.dq
         except:
             self.vel = np.zeros(6)
-            rospy.logwarn(
-                "Jacobian not set, end-effector velocity temporarily not available"
-            )
+            # rospy.logwarn(
+            #     "Jacobian not set, end-effector velocity temporarily not available"
+            # )
 
     def _set_jacobian(self, msg):
         jacobian = np.array(list(msg.zero_jacobian)).reshape((6, 7), order="F")
         self.jacobian = jacobian
+
+    def get_jacobian(self):
+        getattr(self, "jacobian", np.zeros((6, 7)))
 
 
 ###############################################################################
@@ -188,6 +195,7 @@ def main(_):
     GRIPPER_IP = FLAGS.gripper_ip
     GRIPPER_TYPE = FLAGS.gripper_type
     RESET_JOINT_TARGET = FLAGS.reset_joint_target
+    CONTROL_MODE = FLAGS.control_mode
 
     webapp = Flask(__name__)
 
@@ -219,6 +227,7 @@ def main(_):
         gripper_type=GRIPPER_TYPE,
         ros_pkg_name=ROS_PKG_NAME,
         reset_joint_target=RESET_JOINT_TARGET,
+        control_mode=CONTROL_MODE
     )
     robot_server.start_impedance()
 
@@ -340,18 +349,18 @@ def main(_):
     # Route for getting all state information
     @webapp.route("/getstate", methods=["POST"])
     def get_state():
-        return jsonify(
-            {
+        state = {
                 "pose": np.array(robot_server.pos).tolist(),
                 "vel": np.array(robot_server.vel).tolist(),
                 "force": np.array(robot_server.force).tolist(),
                 "torque": np.array(robot_server.torque).tolist(),
                 "q": np.array(robot_server.q).tolist(),
                 "dq": np.array(robot_server.dq).tolist(),
-                "jacobian": np.array(robot_server.jacobian).tolist(),
-                "gripper_pos": gripper_server.gripper_pos,
+                "jacobian": np.array(robot_server.get_jacobian()).tolist(),
             }
-        )
+        if GRIPPER_TYPE != 'None':
+            state['gripper'] = np.array(gripper_server.gripper_pos).tolist()
+        return jsonify(state)
 
     # # Route for updating compliance parameters
     # @webapp.route("/update_param", methods=["POST"])

@@ -57,7 +57,7 @@ class FrankaBasketball(gym.Env):
                 hz=50,
                 fake_env=False,
                 save_video=False,
-                config: BasketballEnvConfig = None,
+                config: BasketballEnvConfig = BasketballEnvConfig(),
                 max_episode_length=1000, 
                 **kwargs):
         self.camera_lock = threading.Lock()
@@ -69,7 +69,7 @@ class FrankaBasketball(gym.Env):
         self.second_derivative_range = kwargs.pop(
             "second_derivative_range", (9, 20, 100))
         self.trusted_region = kwargs.pop(
-            "trusted_region", ((220, 100), (450, 500)))
+            "trusted_region", ((0, 0), (480, 640)))
         self.calibration_pos = kwargs.pop(
             "calibration_pos", None)
         self.debug = kwargs.pop("debug", False) 
@@ -146,7 +146,7 @@ class FrankaBasketball(gym.Env):
                             -np.inf, np.inf, shape=(7,)
                         ),  # xyz + quat
                         "tcp_vel": gym.spaces.Box(-np.inf, np.inf, shape=(6,)),
-                        "joint_pose": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
+                        "joint_pos": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
                         "joint_vel": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
                     }
                 ),
@@ -156,6 +156,8 @@ class FrankaBasketball(gym.Env):
 
         if fake_env:
             return
+
+        self.init_cameras()
 
         print("Initialized Franka")
 
@@ -186,10 +188,6 @@ class FrankaBasketball(gym.Env):
         input("Press enter when you finish picking up the ball and reset joints...")
 
     def reset(self, joint_reset=False, **kwargs):
-        with self.camera_lock:
-            self.grounded = False
-            self.camera_reward = None
-
         if self.save_video:
             self.save_video_recording()
 
@@ -205,6 +203,11 @@ class FrankaBasketball(gym.Env):
         self._update_currpos()
         obs = self._get_obs()
 
+        with self.camera_lock:
+            self.grounded = False
+            self.camera_reward = None
+            self.recording_frames.clear()
+            print('Camera reset.')
         return obs, {}
     
     def save_video_recording(self):
@@ -301,6 +304,7 @@ class FrankaBasketball(gym.Env):
         self.rec_detection.append(mask)
         if len(self.rec_detection) > self.record_length:
             self.rec_detection.pop(0)
+        self.recording_frames.append(mask)
 
         # 9) If no valid contour found, fallback to last known position (or [0,0])
         if center is None:
@@ -450,6 +454,10 @@ class FrankaBasketball(gym.Env):
         self.camera_loop_thread = None
         print_green("Camera closed.")
 
+    def close(self):
+        self.close_cameras()
+        super().close()
+
     def _recover(self):
         """Internal function to recover the robot from error state."""
         requests.post(self.url + "clearerr")
@@ -477,7 +485,7 @@ class FrankaBasketball(gym.Env):
         self.q[:] = np.array(ps["q"])
         self.dq[:] = np.array(ps["dq"])
 
-        self.curr_gripper_pos = np.array(ps["gripper_pos"])
+        # self.curr_gripper_pos = np.array(ps["gripper_pos"])
 
     
     def step(self, action: np.ndarray) -> tuple:
@@ -488,7 +496,7 @@ class FrankaBasketball(gym.Env):
         self.nextjointpos = self.q.copy()
         self.nextjointpos += action * self.action_scale
 
-        self._send_joint_command(self.clip_safety_box(self.nextpos))
+        self._send_joint_command(self.clip_safety_box(self.nextjointpos))
 
         self.curr_path_length += 1
         dt = time.time() - start_time
@@ -501,7 +509,6 @@ class FrankaBasketball(gym.Env):
         done = self.curr_path_length >= self.max_episode_length
         with self.camera_lock:
             done = done or self.grounded
-        del ob['images']    # The images are only used for compute rewards.
         return ob, reward, done, False, {}
     
     def _send_joint_command(self, joint: np.ndarray):
@@ -513,7 +520,7 @@ class FrankaBasketball(gym.Env):
 
     def _get_obs(self) -> dict:
         state_observation = {
-            "tcp_pos": self.currpos,
+            "tcp_pose": self.currpos,
             "tcp_vel": self.currvel,
             "joint_pos": self.q,
             "joint_vel": self.dq

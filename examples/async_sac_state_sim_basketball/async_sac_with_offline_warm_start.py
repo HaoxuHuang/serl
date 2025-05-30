@@ -378,7 +378,7 @@ def learner(rng, agent: SACAgent, replay_buffer, replay_iterator, offline_data, 
                         lambda x, y: jnp.concatenate(
                             [
                                 x[: int(x.shape[0] * (1 - ratio))],
-                                y[: int(y.shape[0] * ratio)],
+                                y[: x.shape[0] - int(x.shape[0] * (1 - ratio))],
                             ],
                             axis=0,
                         ),

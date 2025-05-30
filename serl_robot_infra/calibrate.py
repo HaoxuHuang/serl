@@ -4,7 +4,8 @@ if not cap.isOpened():
     raise RuntimeError("Unable to open camera.")
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-ret, frame = cap.read()
+for _ in range(30):
+    ret, frame = cap.read()
 import matplotlib.pyplot as plt
 plt.imshow(frame)
 plt.show()
