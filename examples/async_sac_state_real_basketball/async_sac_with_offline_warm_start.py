@@ -320,6 +320,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     timer = Timer()
     running_return = 0.0
     full_history = []
+    flag = False
     for step in tqdm.tqdm(range(FLAGS.actor_steps), dynamic_ncols=True):
         timer.tick("total")
 
@@ -355,26 +356,32 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
             if EMERGENCY_FLAG.is_set() or ACTOR_FLAG.is_set():
                 print_green("Actor loop interrupted")
                 print(f"Done: {done}")
-                response = input(
-                    "Do you want to continue (c), mannually add reward (r). save replay buffer (s) or exit (e)? "
-                )
-                if response == "c" or response == "r":
-                    done = True
-                    if response == "r":
-                        reward += input("Enter reward for this episode: ")
-                    EMERGENCY_FLAG.clear()
-                    ACTOR_FLAG.clear()
-                    print("Continuing")
-                else:
-                    if response == "s":
-                        print("Saving replay buffer")
-                        data_store.save(
-                            "replay_buffer_actor.npz"
-                        )  # not yet supported for QueuedDataStore
-                    else:
-                        print("Replay buffer not saved")
-                    print("Stopping actor client")
-                    client.stop()
+                while True:
+                    response = input(
+                        "Do you want to continue (c), mannually add reward (r). save replay buffer (s) or exit (e)? "
+                    )
+                    if response == "c" or response == "r":
+                        done = True
+                        if response == "r":
+                            reward += input("Enter reward for this episode: ")
+                        EMERGENCY_FLAG.clear()
+                        ACTOR_FLAG.clear()
+                        print("Continuing")
+                        break
+                    elif response == "s" or response == "e":
+                        if response == "s":
+                            print("Saving replay buffer")
+                            data_store.save(
+                                "replay_buffer_actor.npz"
+                            )  # not yet supported for QueuedDataStore
+                        else:
+                            print("Replay buffer not saved")
+                        print("Stopping actor client")
+                        if not FLAGS.teacher:
+                            client.stop()
+                        flag = True
+                        break
+                if flag:
                     break
 
             running_return += reward
@@ -396,7 +403,8 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
             obs = next_obs
             if done or truncated:
                 stats = {"train": info}  # send stats to the learner to log
-                client.request("send-stats", stats)
+                if not FLAGS.teacher:
+                    client.request("send-stats", stats)
 
                 running_return = 0.0
                 if FLAGS.debug:
