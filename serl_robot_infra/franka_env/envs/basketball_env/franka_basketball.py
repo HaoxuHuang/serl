@@ -11,17 +11,19 @@ import pygame
 from datetime import datetime
 from collections import OrderedDict
 from typing import Dict
+import logging
 
 from franka_env.utils.rotations import euler_2_quat
 from franka_env.envs.basketball_env.config import BasketballEnvConfig
 
 
 class ImageDisplayer(threading.Thread):
-    def __init__(self, queue):
+    def __init__(self, queue, caption="Camera View"):
         threading.Thread.__init__(self)
         self.queue = queue
         self.daemon = True  # make this a daemon thread
-
+        self.caption = caption
+ 
     def run(self):
         while True:
             img_array = self.queue.get()  # retrieve an image from the queue
@@ -33,7 +35,7 @@ class ImageDisplayer(threading.Thread):
                 pygame.init()
                 h, w = img_array.shape[:2]
                 self.screen = pygame.display.set_mode((w, h))
-                pygame.display.set_caption("Camera View")
+                pygame.display.set_caption(self.caption)
                 self.clock = pygame.time.Clock()
                 self._pygame_inited = True
 
@@ -49,7 +51,7 @@ class ImageDisplayer(threading.Thread):
             # draw and update
             self.screen.blit(surface, (0, 0))
             pygame.display.flip()
-            self.clock.tick(30)  # limit to ~30 FPS
+            self.clock.tick(10)
 
 
 def print_green(x):
@@ -71,7 +73,7 @@ class FrankaBasketball(gym.Env):
                  hz=50,
                  fake_env=False,
                  save_video=False,
-                 config: BasketballEnvConfig = None,
+                 config: BasketballEnvConfig = BasketballEnvConfig(),
                  max_episode_length=1000,
                  **kwargs):
         self.camera_lock = threading.Lock()
@@ -96,10 +98,11 @@ class FrankaBasketball(gym.Env):
         self.rec_hit = []
         self.angle_penalty = angle_penalty
         self.energy_penalty = energy_penalty
-        if self.debug:
-            self.image_display = queue.Queue()
-            self.image_displayer = ImageDisplayer(self.image_display)
-            self.image_displayer.start()
+        # if self.debug:
+        
+        self.image_display = queue.Queue()
+        self.image_displayer = ImageDisplayer(self.image_display)
+        self.image_displayer.start()
 
         # safety limit
         self.joint_bounding_box_low = [-2.89, -
@@ -118,12 +121,12 @@ class FrankaBasketball(gym.Env):
         #     [config.RESET_POSE[:3], euler_2_quat(config.RESET_POSE[3:])]
         # )
 
-        self.currpos = np.zeros((7,))  # tcp pose in xyz + quat
-        self.currvel = np.zeros((6,))
-        self.q = np.zeros((7,))
-        self.dq = np.zeros((7,))
-        self.currforce = np.zeros((3,))
-        self.currtorque = np.zeros((3,))
+        self.currpos = np.zeros((7,), dtype=np.float32)  # tcp pose in xyz + quat
+        self.currvel = np.zeros((6,), dtype=np.float32)
+        self.q = np.zeros((7,), dtype=np.float32)
+        self.dq = np.zeros((7,), dtype=np.float32)
+        self.currforce = np.zeros((3,), dtype=np.float32)
+        self.currtorque = np.zeros((3,), dtype=np.float32)
 
         self.curr_gripper_pos = 0
         self.gripper_binary_state = 0  # 0 for open, 1 for closed
@@ -266,7 +269,7 @@ class FrankaBasketball(gym.Env):
 
         # 2) Threshold for “orange” in HSV space
         #    (tweak these ranges if your lighting/background differs)
-        lower_orange = np.array([10, 80, 150])
+        lower_orange = np.array([10, 100, 150])
         upper_orange = np.array([30, 255, 255])
         mask = cv2.inRange(hsv, lower_orange, upper_orange)
         mask = np.logical_and(mask, self.region_mask)
@@ -319,6 +322,9 @@ class FrankaBasketball(gym.Env):
                     center = np.array([cx, cy])
 
         self.rec.append(cv2.cvtColor(blurred, cv2.COLOR_BGR2RGB))
+        if  self.image_display.empty():
+            self.image_display.put(self.rec[-1])
+            self.image_display.put(mask)
         if len(self.rec) > self.record_length:
             self.rec.pop(0)
         self.rec_detection.append(mask)
@@ -386,8 +392,8 @@ class FrankaBasketball(gym.Env):
         if not self.grounded:
             import copy
             self.rec_hit = copy.deepcopy(self.rec[-self.context_length:])
-        if self.debug:
-            self.image_display.put(self.rec_hit[self.context_length // 2])
+        # if self.debug:
+        # self.image_display.put(self.rec_hit[self.context_length // 2])
         return center, "hit ground"
 
     def camera_loop(self):
@@ -501,14 +507,14 @@ class FrankaBasketball(gym.Env):
         Internal function to get the latest state of the robot and its gripper.
         """
         ps = requests.post(self.url + "getstate").json()
-        self.currpos[:] = np.array(ps["pose"])
-        self.currvel[:] = np.array(ps["vel"])
+        self.currpos[:] = np.array(ps["pose"], dtype=np.float32)
+        self.currvel[:] = np.array(ps["vel"], dtype=np.float32)
 
-        self.currforce[:] = np.array(ps["force"])
-        self.currtorque[:] = np.array(ps["torque"])
+        self.currforce[:] = np.array(ps["force"], dtype=np.float32)
+        self.currtorque[:] = np.array(ps["torque"], dtype=np.float32)
 
-        self.q[:] = np.array(ps["q"])
-        self.dq[:] = np.array(ps["dq"])
+        self.q[:] = np.array(ps["q"], dtype=np.float32)
+        self.dq[:] = np.array(ps["dq"], dtype=np.float32)
 
         # self.curr_gripper_pos = np.array(ps["gripper_pos"])
 
@@ -524,6 +530,7 @@ class FrankaBasketball(gym.Env):
 
         self.curr_path_length += 1
         dt = time.time() - start_time
+        # print("Step delta time: ", dt)
         time.sleep(max(0, (1.0 / self.hz) - dt))
 
         self._update_currpos()
@@ -540,7 +547,7 @@ class FrankaBasketball(gym.Env):
         self._recover()
         arr = np.array(joint).astype(np.float32)
         data = {"arr": arr.tolist()}
-        requests.post(self.url + "joint", json=data)
+        requests.post(self.url + "pose", json=data)
 
     def _get_obs(self) -> dict:
         state_observation = {

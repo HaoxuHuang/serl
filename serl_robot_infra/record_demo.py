@@ -59,7 +59,7 @@ if __name__ == "__main__":
         actions = np.zeros((7,))
         next_obs, rew, done, truncated, info = env.step(action=actions)
         if "guidance_action" in info:
-            actions = info["guidance_action"]
+            actions = info["guidance_action"] / env.action_scale
 
         transition = copy.deepcopy(
             dict(
