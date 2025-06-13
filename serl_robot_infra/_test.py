@@ -7,18 +7,18 @@ debug=False
 # debug=True
 record_length=600
 calib_pos=None
-calib_pos = [
-    [(167.3, 309.8), (0, 0)],  # center
-    [(126.2, 277.3), (-3, 0)],  # up
-    [(220.5, 346.4), (3, 0)],  # down
-    [(194.6, 241.5), (0, -3)],  # left
-    [(138.8, 373.6), (0, 3)],  # right
-]
+# calib_pos = [
+#     [(167.3, 309.8), (0, 0)],  # center
+#     [(126.2, 277.3), (-3, 0)],  # up
+#     [(220.5, 346.4), (3, 0)],  # down
+#     [(194.6, 241.5), (0, -3)],  # left
+#     [(138.8, 373.6), (0, 3)],  # right
+# ]
 
 config = BasketballEnvConfig()
 
 
-env = FrankaBasketball(config=config, trusted_region=((0,0),(480,640)), calibration_pos=calib_pos, debug=debug, record_length=record_length, )
+env = FrankaBasketball(config=config, trusted_region=((0,0),(480,640)), debug=debug, record_length=record_length, )
 print('... OK')
 env.init_cameras()
 

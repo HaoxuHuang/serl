@@ -76,11 +76,11 @@ class FrankaBasketball(gym.Env):
                  config: BasketballEnvConfig = BasketballEnvConfig(),
                  max_episode_length=1000,
                  calibration_pos= [
-                    [(167.3, 309.8), (0, 0)],  # center
-                    [(126.2, 277.3), (-3, 0)],  # up
-                    [(220.5, 346.4), (3, 0)],  # down
-                    [(194.6, 241.5), (0, -3)],  # left
-                    [(138.8, 373.6), (0, 3)],  # right
+                    [(168.0, 291.3), (0, 0)],  # center
+                    [(126.6, 256.0), (-3, 0)],  # up
+                    [(217.0, 330.2), (3, 0)],  # down
+                    [(199.1, 222.8), (0, -3)],  # left
+                    [(140.6, 354.1), (0, 3)],  # right
                  ],
                  **kwargs):
         self.camera_lock = threading.Lock()

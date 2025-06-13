@@ -5,7 +5,7 @@ import numpy as np
 dirs = os.listdir('.')
 cur = []
 for dir in dirs:
-    if dir.startswith('basketball_5_demos_2025-05-30'):
+    if dir.startswith('basketball_5_demos_2025-06-13'):
         cur.append(dir)
 
 cur=sorted(cur)
@@ -16,10 +16,10 @@ for d in cur:
     with open(d,'rb') as f:
         pkls.append(pickle.load(f)) 
 
-for i in range(2):
-    for t in pkls[i]:
-        if t['dones']:
-            t['rewards']=t['rewards']+18
+# for i in range(2):
+#     for t in pkls[i]:
+#         if t['dones']:
+#             t['rewards']=t['rewards']+18
 
 for i in range(len(pkls)):
     for t in pkls[i]:
@@ -31,5 +31,5 @@ out=[]
 for t in pkls:
     out=out+t
 
-with open('basketball_5x6_demos_2025-05-30.pkl','wb') as f:
+with open('basketball_5x6_demos_2025-06-13.pkl','wb') as f:
     pickle.dump(out,f)
