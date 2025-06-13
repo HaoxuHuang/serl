@@ -395,7 +395,7 @@ if __name__ == "__main__":
             for it in demo_data:
                 # pos = it['observations'][:7]
                 # env.set_joint_pos(pos)
-                action = it['actions'] * 5
+                action = it['actions']
                 obs, rew, terminated, _, _ = env.step(action)
 
                 env.render()
