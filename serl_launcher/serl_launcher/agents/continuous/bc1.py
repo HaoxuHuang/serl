@@ -16,6 +16,7 @@ from serl_launcher.common.typing import Batch, Data, Params, PRNGKey
 from serl_launcher.networks.actor_critic_nets import Critic, Policy, ensemblize
 from serl_launcher.networks.lagrange import GeqLagrangeMultiplier
 from serl_launcher.networks.mlp import MLP
+from serl_launcher.networks.actor_critic_nets import TanhMultivariateNormalDiag
 
 
 class BC1Agent(flax.struct.PyTreeNode):
@@ -303,6 +304,7 @@ class BC1Agent(flax.struct.PyTreeNode):
         *,
         seed: Optional[PRNGKey] = None,
         argmax: bool = False,
+        temperature: float = 1.0,
         **kwargs,
     ) -> jnp.ndarray:
         """
@@ -311,6 +313,8 @@ class BC1Agent(flax.struct.PyTreeNode):
         """
 
         dist = self.forward_policy(observations, rng=seed, train=False)
+        dist = TanhMultivariateNormalDiag(
+            dist.distribution._loc, dist.distribution._scale_diag * temperature)
         if argmax:
             assert seed is None, "Cannot specify seed when sampling deterministically"
             return dist.mode()
