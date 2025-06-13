@@ -39,7 +39,7 @@ from franka_env.envs.wrappers import (
     HandGuidance,
     ArrayObsWrapper
 )
-from serl_launcher.wrappers.serl_obs_wrappers import SERLObsWrapper
+from serl_launcher.wrappers.serl_obs_wrappers import SERLObsWrapper, SERLObsWrapper2
 
 register(
     id="Basket-v0",
@@ -225,6 +225,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     global ACTOR_FLAG
 
     if FLAGS.eval_checkpoint_step:
+        assert 0
         success_counter = 0
         time_list = []
 
@@ -309,7 +310,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         params = params["params"]
         # with open("log.txt", "w") as f:
         print(params)
-        print(agent.state)
+        # print(agent.state)
         agent = agent.replace(state=agent.state.replace(params=params))
         print_green("Loaded checkpoint from " + FLAGS.load_checkpoint)
 
@@ -329,8 +330,8 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                 actions = env.action_space.sample()
             else:
                 sampling_rng, key = jax.random.split(sampling_rng)
-                # if FLAGS.teacher:
-                if False:
+                if FLAGS.teacher:
+                # if False:
                     actions = agent.sample_actions(
                         observations=jax.device_put(obs),
                         argmax=True,
@@ -342,9 +343,9 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                         deterministic=False,
                     )
                 actions = np.asarray(jax.device_get(actions))
-                print(obs)
-                print(actions)
-                print(actions.dtype)
+                # print(obs)
+                # print(actions)
+                # print(actions.dtype)
 
         # Step environment
         with timer.context("step_env"):
@@ -510,11 +511,11 @@ def learner(
     timer = Timer()
 
     # # show replay buffer progress bar during training
-    # pbar = tqdm.tqdm(
-    #     total=FLAGS.replay_buffer_capacity,
-    #     initial=len(replay_buffer),
-    #     desc="replay buffer",
-    # )
+    pbar = tqdm.tqdm(
+        total=FLAGS.replay_buffer_capacity,
+        initial=len(replay_buffer),
+        desc="replay buffer",
+    )
 
     fixed_offline_batch = next(offline_iterator)
     import copy
@@ -571,36 +572,43 @@ def learner(
                 FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
             )
 
-        # pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar
+        pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar
         update_steps += 1
 
         if EMERGENCY_FLAG.is_set() or LEARNER_FLAG.is_set():
             print("Learner loop interrupted")
-            response = input(
-                "Do you want to continue (c), decay start(d), save training state and exit (s) or simply exit (e)? "
-            )
-            if response == "d":
-                ratio_controller.start_decay()
-                print("Decay mode activated (setdecay=True), continue training")
-                EMERGENCY_FLAG.clear()
-                LEARNER_FLAG.clear()
-            elif response == "c":
-                print("Continuing")
-                EMERGENCY_FLAG.clear()
-                LEARNER_FLAG.clear()
-            else:
-                if response == "s":
-                    print("Saving learner state")
-                    agent_ckpt = checkpoints.save_checkpoint(
-                        FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
-                    )
-                    replay_buffer.save(
-                        "replay_buffer_learner.npz"
-                    )  # not yet supported for QueuedDataStore
-                    # TODO: save other parts of training state
+            flag_break = False
+            while True:
+                response = input(
+                    "Do you want to continue (c), decay start(d), save training state and exit (s) or simply exit (e)? "
+                )
+                if response == "d":
+                    ratio_controller.start_decay()
+                    print("Decay mode activated (setdecay=True), continue training")
+                    EMERGENCY_FLAG.clear()
+                    LEARNER_FLAG.clear()
+                elif response == "c":
+                    print("Continuing")
+                    EMERGENCY_FLAG.clear()
+                    LEARNER_FLAG.clear()
+                elif response == "s" or response == "e":
+                    if response == "s":
+                        print("Saving learner state")
+                        agent_ckpt = checkpoints.save_checkpoint(
+                            FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
+                        )
+                        replay_buffer.save(
+                            "replay_buffer_learner.npz"
+                        )  # not yet supported for QueuedDataStore
+                        # TODO: save other parts of training state
+                    else:
+                        print("Training state not saved")
+                    print("Stopping learner client")
+                    flag_break = True
                 else:
-                    print("Training state not saved")
-                print("Stopping learner client")
+                    continue
+                break
+            if flag_break:
                 break
 
     # Wrap up the learner loop
@@ -652,10 +660,22 @@ def main(_):
     # if FLAGS.debug:
     #     env = BasketMonitorWrapper(env)
 
-    env = gym.make("FrankaBasketball-State-v0", save_video=True)
+    env = gym.make("FrankaBasketball-State-v0", save_video=True, use_camera=FLAGS.actor)
     env = HandGuidance(env)
     env = SERLObsWrapper(env)
     env = ArrayObsWrapper(env)
+
+    old_env = gym.make(
+        "Basket-v0",
+        action_scale=FLAGS.action_scale,
+        angle_penalty=FLAGS.angle_penalty,
+        energy_penalty=FLAGS.energy_penalty,
+        seed=FLAGS.seed,
+        control_dt=FLAGS.control_dt,
+        physics_dt=FLAGS.physics_dt,
+        time_limit=FLAGS.time_limit,
+    )
+    old_env = gym.wrappers.FlattenObservation(old_env)
 
     rng, sampling_rng = jax.random.split(rng)
     agent: SACAgent = make_sac_agent(
@@ -675,7 +695,7 @@ def main(_):
         sampling_rng = jax.device_put(
             sampling_rng, device=sharding.replicate())
         replay_buffer = make_replay_buffer(
-            env,
+            old_env,
             capacity=FLAGS.replay_buffer_capacity,
             rlds_logger_path=FLAGS.log_rlds_path,
             type="replay_buffer",
@@ -692,7 +712,7 @@ def main(_):
             from serl_launcher.data.data_store import populate_data_store
 
             offline_data = make_replay_buffer(
-                env,
+                old_env,
                 capacity=FLAGS.replay_buffer_capacity,
                 rlds_logger_path=FLAGS.log_rlds_path,
                 type="replay_buffer",

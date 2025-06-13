@@ -82,6 +82,7 @@ class FrankaBasketball(gym.Env):
                     [(199.1, 222.8), (0, -3)],  # left
                     [(140.6, 354.1), (0, 3)],  # right
                  ],
+                 use_camera=False,
                  **kwargs):
         self.camera_lock = threading.Lock()
         self.camera_running = False
@@ -178,12 +179,23 @@ class FrankaBasketball(gym.Env):
                 ),
             }
         )
+        # self.observation_space = gym.spaces.Dict(
+        #     {
+        #         "tcp_pose": gym.spaces.Box(
+        #             -np.inf, np.inf, shape=(7,)
+        #         ),  # xyz + quat
+        #         "joint_pos": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
+        #         "joint_vel": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),     
+        #     }
+        # )
         self.cycle_count = 0
 
         if fake_env:
             return
 
-        self.init_cameras()
+        self.use_camera = use_camera
+        if use_camera:
+            self.init_cameras()
 
         print("Initialized Franka")
 
@@ -494,7 +506,8 @@ class FrankaBasketball(gym.Env):
         print_green("Camera closed.")
 
     def close(self):
-        self.close_cameras()
+        if self.use_camera:
+            self.close_cameras()
         super().close()
 
     def _recover(self):
