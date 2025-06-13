@@ -178,7 +178,8 @@ class BC1Agent(flax.struct.PyTreeNode):
         chex.assert_shape(
             predicted_qs, (self.config["critic_ensemble_size"], batch_size)
         )
-        target_qs = target_q[None].repeat(self.config["critic_ensemble_size"], axis=0)
+        target_qs = target_q[None].repeat(
+            self.config["critic_ensemble_size"], axis=0)
         chex.assert_equal_shape([predicted_qs, target_qs])
         critic_loss = jnp.mean((predicted_qs - target_qs) ** 2)
 
@@ -202,11 +203,16 @@ class BC1Agent(flax.struct.PyTreeNode):
         log_probs = action_distributions.log_prob(batch["actions"])
 
         mse = ((pi_actions - batch["actions"]) ** 2).sum(-1)
-        actor_loss = -(log_probs).mean()
+        l2_reg = self.config.get("l2_reg", 3)
+        # actor_params = params["actor"]
+        l2_loss = sum(jnp.sum(jnp.square(p))
+                      for p in jax.tree_util.tree_leaves(params))
+        actor_loss = -(log_probs).mean() + l2_reg * l2_loss
 
         info = {
             "actor_loss": actor_loss,
             "mse": mse.mean(),
+            "l2_loss": l2_loss,
         }
 
         return actor_loss, info
@@ -273,7 +279,8 @@ class BC1Agent(flax.struct.PyTreeNode):
 
         # Update target network (if requested)
         if "critic" in networks_to_update:
-            new_state = new_state.target_update(self.config["soft_target_update_rate"])
+            new_state = new_state.target_update(
+                self.config["soft_target_update_rate"])
 
         # Update RNG
         rng, _ = jax.random.split(self.state.rng)
@@ -511,8 +518,10 @@ class BC1Agent(flax.struct.PyTreeNode):
             **policy_kwargs,
             name="actor",
         )
-        critic_cls = partial(Critic, encoder=None, network=MLP(**critic_network_kwargs))
-        critic_def = ensemblize(critic_cls, critic_ensemble_size)(name="critic")
+        critic_cls = partial(Critic, encoder=None,
+                             network=MLP(**critic_network_kwargs))
+        critic_def = ensemblize(
+            critic_cls, critic_ensemble_size)(name="critic")
         temperature_def = GeqLagrangeMultiplier(
             init_value=temperature_init,
             constraint_shape=(),

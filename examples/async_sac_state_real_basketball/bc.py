@@ -148,8 +148,9 @@ def actor(agent: BC1Agent, data_store, env, sampling_rng):
             sampling_rng, key = jax.random.split(sampling_rng)
             actions = agent.sample_actions(
                 observations=jax.device_put(obs),
-                seed=key,
-                deterministic=False,
+                argmax=True,
+                # seed=key,
+                # deterministic=False,
             )
             actions = np.asarray(jax.device_get(actions))
 
