@@ -248,7 +248,7 @@
                       <camera name="handcam_depth" pos="-0.05 0 0" fovy="62" quat="0 1 -1 0"/>
                       <camera name="handcam_rgb" pos="-0.05 0.015 0" fovy="42.5" quat="0 1 -1 0"/>
                       <site name="pinch" pos="0 0 0.145"/>
-                      <inertial mass="0.73" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
+                      <inertial mass="0.00073" pos="-0.01 0 0.03" diaginertia="0.001 0.0025 0.0017"/>
                       <geom mesh="ball_thrower" material="off_white" class="panda/visual" />
                       <geom mesh="hand_c0" class="panda/collision"/>
                       <geom mesh="hand_c1" class="panda/collision"/>

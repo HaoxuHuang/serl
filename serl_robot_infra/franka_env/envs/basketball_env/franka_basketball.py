@@ -429,13 +429,16 @@ class FrankaBasketball(gym.Env):
 
             contact_pos, info = self.hit_ground()
             if contact_pos is not None:
-                print_green(
-                    f"[{len(self.rec)}] Ball hit the ground, contact position: {contact_pos}")
                 with self.camera_lock:
                     if not self.grounded:
+                        print_green(
+                            f"[{len(self.rec)}] Ball hit the ground, contact position: {contact_pos}")
                         self.grounded = True
                         self.camera_reward = 20 - np.linalg.norm(contact_pos)
                         print_green(f'Reward: {self.camera_reward}')
+                    else:
+                        print(
+                            f"[{len(self.rec)}] Ball hit the ground, contact position: {contact_pos}")
 
             with self.camera_lock:
                 if not self.camera_running:

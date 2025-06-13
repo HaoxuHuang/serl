@@ -4,6 +4,7 @@ from typing import Any, Literal, Tuple, Dict
 import gym
 import mujoco
 import numpy as np
+import argparse
 from gym import spaces
 
 try:
@@ -206,6 +207,34 @@ class BasketEnv(MujocoGymEnv):
         info['reward'] = rew_info
         return obs, rew, terminated, False, info
 
+    def set_joint_pos(self, joint_pos):
+        """
+        Set the joint position of the robot arm.
+        Params:
+            joint_pos: np.ndarray, joint positions to set
+        """
+        mujoco.mj_resetData(self._model, self._data)
+
+        # Reset arm to home position.
+        self._data.qpos[self._panda_dof_ids] = joint_pos
+        mujoco.mj_forward(self._model, self._data)
+
+        # Reset mocap body to home position.
+        tcp_pos = self._data.sensor("panda/hand_pos").data
+        self._data.mocap_pos[0] = tcp_pos
+
+        # Sample a new block position.
+        # block_xy = np.random.uniform(*_SAMPLING_BOUNDS)
+        # self._data.jnt("block").qpos[:3] = (0.48670042, 0.00820504, 0.610814)
+        # mujoco.mj_forward(self._model, self._data)
+
+        # Cache the initial block height.
+        # self._z_init = self._data.sensor("block_pos").data[2]
+        # self._z_success = self._z_init + 0.2
+
+        obs = self._compute_observation()
+        return obs, {}
+
     def render(self):
         rendered_frames = []
         for cam_id in self.camera_id:
@@ -315,32 +344,64 @@ class BasketEnv(MujocoGymEnv):
         return self.time_limit_exceeded()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Basketball Simulation Environment")
+    parser.add_argument(
+        "--demo_path",
+        type=str,
+        default=None,
+        help="Path to the demo data file.",
+    )
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
+    args = parse_args()
     env = BasketEnv(render_mode="human")
     env.reset()
-    last_obs = None
-    errors = []
-    for i in range(500):
-        # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
-        # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
-        # action = np.array([0,-1,0,0,0,1,0]) * np.pi * 0.1
-        action = np.random.random(7) * 2 - 1
-        obs, rew, terminated, _, _ = env.step(action)
-        # env.reset()
-        env.render()
-        if last_obs is not None:
-            error = last_obs['state']['panda/joint_pos'] + action * \
-                env._action_scale - obs['state']['panda/joint_pos']
-            errors.append(error)
-        last_obs = obs
-        if terminated:
-            env.reset()
-    # for i in range(500):
-    #     obs, rew, terminated, _, _ = env.step(np.random.uniform(-3.14, -3.14, 7))
-    #     env.render()
-    env.close()
+    if args.demo_path is None:
+        last_obs = None
+        errors = []
+        for i in range(500):
+            # obs, rew, terminated, _, _ = env.step(np.array([0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4]))
+            # obs, rew, terminated, _, _ = env.step(np.array([0] * 7))
+            # action = np.array([0,-1,0,0,0,1,0]) * np.pi * 0.1
+            action = np.random.random(7) * 2 - 1
+            obs, rew, terminated, _, _ = env.step(action)
+            # env.reset()
+            env.render()
+            if last_obs is not None:
+                error = last_obs['state']['panda/joint_pos'] + action * \
+                    env._action_scale - obs['state']['panda/joint_pos']
+                errors.append(error)
+            last_obs = obs
+            if terminated:
+                env.reset()
+        # for i in range(500):
+        #     obs, rew, terminated, _, _ = env.step(np.random.uniform(-3.14, -3.14, 7))
+        #     env.render()
+        env.close()
 
-    import matplotlib.pyplot as plt
-    for i in range(7):
-        plt.plot([e[i] for e in errors])
-    plt.show()
+        import matplotlib.pyplot as plt
+        for i in range(7):
+            plt.plot([e[i] for e in errors])
+        plt.show()
+    else:
+        import pickle
+        with open(args.demo_path, 'rb') as f:
+            demo_data = pickle.load(f)
+            for it in demo_data:
+                # pos = it['observations'][:7]
+                # env.set_joint_pos(pos)
+                action = it['actions'] * 5
+                obs, rew, terminated, _, _ = env.step(action)
+
+                env.render()
+                # if terminated:
+                #     env.reset
+                if it['dones']:
+                    print("Episode done, resetting environment.")
+                    env.reset()
+        env.close()
