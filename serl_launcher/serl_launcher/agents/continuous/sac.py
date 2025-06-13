@@ -16,6 +16,8 @@ from serl_launcher.common.typing import Batch, Data, Params, PRNGKey
 from serl_launcher.networks.actor_critic_nets import Critic, Policy, ensemblize
 from serl_launcher.networks.lagrange import GeqLagrangeMultiplier
 from serl_launcher.networks.mlp import MLP
+from serl_launcher.networks.actor_critic_nets import TanhMultivariateNormalDiag
+from distrax import MultivariateNormalDiag
 
 
 class SACAgent(flax.struct.PyTreeNode):
@@ -178,7 +180,8 @@ class SACAgent(flax.struct.PyTreeNode):
         chex.assert_shape(
             predicted_qs, (self.config["critic_ensemble_size"], batch_size)
         )
-        target_qs = target_q[None].repeat(self.config["critic_ensemble_size"], axis=0)
+        target_qs = target_q[None].repeat(
+            self.config["critic_ensemble_size"], axis=0)
         chex.assert_equal_shape([predicted_qs, target_qs])
         critic_loss = jnp.mean((predicted_qs - target_qs) ** 2)
 
@@ -198,7 +201,8 @@ class SACAgent(flax.struct.PyTreeNode):
         action_distributions = self.forward_policy(
             batch["observations"], rng=policy_rng, grad_params=params
         )
-        actions, log_probs = action_distributions.sample_and_log_prob(seed=sample_rng)
+        actions, log_probs = action_distributions.sample_and_log_prob(
+            seed=sample_rng)
 
         predicted_qs = self.forward_critic(
             batch["observations"],
@@ -286,7 +290,8 @@ class SACAgent(flax.struct.PyTreeNode):
 
         # Update target network (if requested)
         if "critic" in networks_to_update:
-            new_state = new_state.target_update(self.config["soft_target_update_rate"])
+            new_state = new_state.target_update(
+                self.config["soft_target_update_rate"])
 
         # Update RNG
         rng, _ = jax.random.split(self.state.rng)
@@ -310,6 +315,7 @@ class SACAgent(flax.struct.PyTreeNode):
         *,
         seed: Optional[PRNGKey] = None,
         argmax: bool = False,
+        temperature: float = 1.0,
         **kwargs,
     ) -> jnp.ndarray:
         """
@@ -318,6 +324,8 @@ class SACAgent(flax.struct.PyTreeNode):
         """
 
         dist = self.forward_policy(observations, rng=seed, train=False)
+        dist = TanhMultivariateNormalDiag(
+            dist.distribution._loc, dist.distribution._scale_diag * temperature)
         if argmax:
             assert seed is None, "Cannot specify seed when sampling deterministically"
             return dist.mode()
@@ -525,8 +533,10 @@ class SACAgent(flax.struct.PyTreeNode):
             **policy_kwargs,
             name="actor",
         )
-        critic_cls = partial(Critic, encoder=None, network=MLP(**critic_network_kwargs))
-        critic_def = ensemblize(critic_cls, critic_ensemble_size)(name="critic")
+        critic_cls = partial(Critic, encoder=None,
+                             network=MLP(**critic_network_kwargs))
+        critic_def = ensemblize(
+            critic_cls, critic_ensemble_size)(name="critic")
         temperature_def = GeqLagrangeMultiplier(
             init_value=temperature_init,
             constraint_shape=(),
@@ -573,7 +583,8 @@ class SACAgent(flax.struct.PyTreeNode):
             (agent,) = carry
             (minibatch,) = data
             agent, info = agent.update(
-                minibatch, pmap_axis=pmap_axis, networks_to_update=frozenset({"critic"})
+                minibatch, pmap_axis=pmap_axis, networks_to_update=frozenset({
+                                                                             "critic"})
             )
             return (agent,), info
 
@@ -582,9 +593,11 @@ class SACAgent(flax.struct.PyTreeNode):
 
         minibatches = jax.tree_map(make_minibatch, batch)
 
-        (agent,), critic_infos = jax.lax.scan(scan_body, (self,), (minibatches,))
+        (agent,), critic_infos = jax.lax.scan(
+            scan_body, (self,), (minibatches,))
 
-        critic_infos = jax.tree_map(lambda x: jnp.mean(x, axis=0), critic_infos)
+        critic_infos = jax.tree_map(
+            lambda x: jnp.mean(x, axis=0), critic_infos)
         del critic_infos["actor"]
         del critic_infos["temperature"]
 
@@ -632,7 +645,8 @@ class SACAgent(flax.struct.PyTreeNode):
                 rng=None,
                 train=False,
             )  # shape (ensemble, minibatch_size)
-            q_sum = qs.mean(axis=0).sum()  # mean over ensemble, sum over minibatch
+            # mean over ensemble, sum over minibatch
+            q_sum = qs.mean(axis=0).sum()
 
             # 2) log-probability sums over this minibatch
             dist = self.forward_policy(
