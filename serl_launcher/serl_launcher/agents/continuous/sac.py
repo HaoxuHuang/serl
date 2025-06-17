@@ -680,4 +680,8 @@ class SACAgent(flax.struct.PyTreeNode):
         logp_mean = total_lp / batch_size
         total_qa = total_qa / batch_size
 
-        return {"q_mean": q_mean, "logp_mean": logp_mean, "qa_mean": total_qa}
+        return {
+            "DemoState_DemoAction_q_mean": q_mean,
+            "DemoState_DemoAction_logp_mean": logp_mean,
+            "DemoState_PolicyAction_mean": total_qa,
+        }
