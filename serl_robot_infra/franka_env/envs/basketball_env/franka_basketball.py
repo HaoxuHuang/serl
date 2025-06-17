@@ -76,11 +76,11 @@ class FrankaBasketball(gym.Env):
                  config: BasketballEnvConfig = BasketballEnvConfig(),
                  max_episode_length=1000,
                  calibration_pos= [
-                    [(168.0, 291.3), (0, 0)],  # center
-                    [(126.6, 256.0), (-3, 0)],  # up
-                    [(217.0, 330.2), (3, 0)],  # down
-                    [(199.1, 222.8), (0, -3)],  # left
-                    [(140.6, 354.1), (0, 3)],  # right
+                    [(179.4, 292.4), (0, 0)],  # center
+                    [(140.8, 256.7), (-3, 0)],  # up
+                    [(226.6, 333.8), (3, 0)],  # down
+                    [(211.4, 225.4), (0, -3)],  # left
+                    [(150.5, 353.5), (0, 3)],  # right
                  ],
                  use_camera=False,
                  **kwargs):
@@ -112,10 +112,9 @@ class FrankaBasketball(gym.Env):
         self.image_displayer.start()
 
         # safety limit
-        self.joint_bounding_box_low = [-2.89, -
-                                       1.76, -2.89, -3.0, -2.89, 0, -2.89]
+        self.joint_bounding_box_low = [-2.79, -1.66, -2.79, -2.8, -2.79, 0.1, -2.79]
         self.joint_bounding_box_high = [
-            2.89, 1.76, 2.89, -0.07, 2.89, 3.75, 2.89]
+            2.79, 1.18, 2.79, -1.05, 2.79, 3.65, 2.79]
 
         self.action_scale = config.ACTION_SCALE
         self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
@@ -162,8 +161,8 @@ class FrankaBasketball(gym.Env):
         )
         # Action/Observation Space
         self.action_space = gym.spaces.Box(
-            np.ones((7,), dtype=np.float32) * -1,
-            np.ones((7,), dtype=np.float32),
+            np.ones((7,), dtype=np.float32) * -0.4,
+            np.ones((7,), dtype=np.float32) *  0.4,
         )
 
         self.observation_space = gym.spaces.Dict(
@@ -205,13 +204,23 @@ class FrankaBasketball(gym.Env):
         Alignment camera frequency 30Hz with policy frequency 50Hz.
         Individual process for camera. Communicate with shared memory or network or whatever.
         """
+        if obs["state"]["tcp_pose"][0]<0.2:
+            print_red("X OUT OF RANGE")
+            return -10
+        if obs["state"]["tcp_pose"][1]<-0.36 or obs["state"]["tcp_pose"][1]>0.36:
+            print_red("Y OUT OF RANGE")
+            return -10
+        if obs["state"]["tcp_pose"][2]<0 or obs["state"]["tcp_pose"][2]>0.7:
+            print_red("Z OUT OF RANGE")
+            return -10
+        # if obs["state"]["joint_pos"]
         pos_rew = 0.0
         with self.camera_lock:
             if self.camera_reward is not None:
                 pos_rew = self.camera_reward
                 self.camera_reward = None
         angle_rew = 0.0
-        energy_rew = -self.energy_penalty * np.linalg.norm(action)
+        energy_rew = -self.energy_penalty * (np.linalg.norm(action) ** 2)
         return pos_rew + angle_rew + energy_rew
 
     def go_to_rest(self, joint_reset=False):
@@ -543,6 +552,8 @@ class FrankaBasketball(gym.Env):
         """standard gym step function."""
         start_time = time.time()
         action = np.clip(action, self.action_space.low, self.action_space.high)
+        action_norm = np.linalg.norm(action)
+        action_max = np.max(np.abs(action))
 
         self.nextjointpos = self.q.copy()
         self.nextjointpos += action * self.action_scale
@@ -561,7 +572,9 @@ class FrankaBasketball(gym.Env):
         done = self.curr_path_length >= self.max_episode_length
         with self.camera_lock:
             done = done or self.grounded
-        return ob, reward, done, False, {}
+        if reward < -9:
+            done = True
+        return ob, reward, done, False, {'action_norm': action_norm, 'action_max': action_max}
 
     def _send_joint_command(self, joint: np.ndarray):
         """Internal function to send joint command to the robot."""
@@ -572,8 +585,8 @@ class FrankaBasketball(gym.Env):
 
     def _get_obs(self) -> dict:
         state_observation = {
-            "tcp_pose": self.currpos,
             "joint_pos": self.q,
-            "joint_vel": self.dq
+            "joint_vel": self.dq,
+            "tcp_pose": self.currpos,
         }
         return copy.deepcopy(dict(state=state_observation))

@@ -315,7 +315,7 @@ class SACAgent(flax.struct.PyTreeNode):
         *,
         seed: Optional[PRNGKey] = None,
         argmax: bool = False,
-        temperature: float = 1.0,
+        temperature: float = 0.3,
         **kwargs,
     ) -> jnp.ndarray:
         """

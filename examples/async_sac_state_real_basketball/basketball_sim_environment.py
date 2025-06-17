@@ -177,6 +177,7 @@ class BasketEnv(MujocoGymEnv):
         # dg = grasp * self._action_scale[1]
         # ng = np.clip(g + dg, 0.0, 1.0)
         # self._data.ctrl[self._ctrl_id] = ng * 255
+        action = np.clip(action, -0.4, 0.4)
         pos = np.stack(
             [self._data.sensor(
                 f"panda/joint{i}_pos").data for i in range(1, 8)],

@@ -11,6 +11,8 @@ import numpy as np
 import tqdm
 from absl import app, flags
 from flax.training import checkpoints
+import datetime
+import pickle
 
 import threading
 
@@ -106,7 +108,7 @@ flags.DEFINE_integer("sleep_time", 0, "Sleep time.")
 flags.DEFINE_float("action_scale", 0.2, "Scale applied to agent actions.")
 flags.DEFINE_float("angle_penalty", 1e-5,
                    "Penalty coefficient for joint angles.")
-flags.DEFINE_float("energy_penalty", 1e-4,
+flags.DEFINE_float("energy_penalty", 1e-2,
                    "Penalty coefficient for energy usage.")
 # flags.DEFINE_integer("seed", 0, "Random seed for environment/simulation.")
 flags.DEFINE_float("control_dt", 0.02, "Control timestep (seconds).")
@@ -114,7 +116,7 @@ flags.DEFINE_float("physics_dt", 0.002,
                    "Physics simulation timestep (seconds).")
 flags.DEFINE_float("time_limit", 10.0, "Maximum episode duration (seconds).")
 
-flags.DEFINE_float("discount", 0.9999, "Discount.")
+flags.DEFINE_float("discount", 0.999, "Discount.")
 
 flags.DEFINE_string("data_store_path", None,
                     "Path to save and load data_store.")
@@ -123,6 +125,8 @@ flags.DEFINE_boolean("load_offline_data", False, "Load offline data.")
 flags.DEFINE_integer("offline_decay_start", None, "Offline decay start step.")
 flags.DEFINE_integer("offline_decay_steps", None, "Offline decay steps.")
 flags.DEFINE_float("offline_ratio", 0.5, "Offline decay ratio.")
+
+flags.DEFINE_integer("teacher_episodes", 5, "Actor episodes")
 
 
 def print_green(x):
@@ -261,7 +265,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                     if response == "c" or response == "r":
                         done = True
                         if response == "r":
-                            reward += input("Enter reward for this episode: ")
+                            reward += float(input("Enter reward for this episode: "))
                         EMERGENCY_FLAG.clear()
                         ACTOR_FLAG.clear()
                         print("Continuing")
@@ -304,7 +308,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     if not FLAGS.teacher:
         client.recv_network_callback(update_params)
 
-    if FLAGS.teacher and FLAGS.load_checkpoint != None:
+    if FLAGS.load_checkpoint != None:
         params = checkpoints.restore_checkpoint(
             FLAGS.load_checkpoint, target=None)
         params = params["params"]
@@ -322,6 +326,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
     running_return = 0.0
     full_history = []
     flag = False
+    cur_episode = 0
     for step in tqdm.tqdm(range(FLAGS.actor_steps), dynamic_ncols=True):
         timer.tick("total")
 
@@ -364,7 +369,9 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                     if response == "c" or response == "r":
                         done = True
                         if response == "r":
-                            reward += input("Enter reward for this episode: ")
+                            reward = float(input("Enter reward for this episode: "))
+                        else:
+                            reward = -10
                         EMERGENCY_FLAG.clear()
                         ACTOR_FLAG.clear()
                         print("Continuing")
@@ -416,6 +423,12 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
                     time.sleep(FLAGS.sleep_time)
                 obs, _ = env.reset()
 
+                if FLAGS.teacher:
+                    cur_episode += 1
+                    print('Episodes: ', cur_episode, '/', FLAGS.teacher_episodes)
+                    if cur_episode >= FLAGS.teacher_episodes:
+                        break
+
         if FLAGS.render:
             env.render()
 
@@ -430,6 +443,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
             if not FLAGS.teacher:
                 client.request("send-stats", stats)
 
+
     print("Actor loop finished")
 
     if FLAGS.teacher and FLAGS.data_store_path is not None:
@@ -437,7 +451,7 @@ def actor(agent: SACAgent, data_store, env, sampling_rng):
         import pickle
 
         os.makedirs(FLAGS.data_store_path, exist_ok=True)
-        with open(os.path.join(FLAGS.data_store_path, "data_store.pkl"), "wb") as f:
+        with open(os.path.join(FLAGS.data_store_path, f"data_store_{datetime.datetime.now().strftime(format='%Y%m%d-%H%M%S')}.pkl"), "wb") as f:
             pickle.dump(full_history, f)
         print_green("Saved data store to " + FLAGS.data_store_path)
 
@@ -522,6 +536,8 @@ def learner(
 
     fixed_offline_batch = copy.deepcopy(fixed_offline_batch)
 
+    _ = input("Input anything to start learner.")
+
     for step in tqdm.tqdm(
         range(FLAGS.learner_steps), dynamic_ncols=True, desc="learner"
     ):
@@ -575,6 +591,8 @@ def learner(
         pbar.update(len(replay_buffer) - pbar.n)  # update replay buffer bar
         update_steps += 1
 
+        time.sleep(1)
+
         if EMERGENCY_FLAG.is_set() or LEARNER_FLAG.is_set():
             print("Learner loop interrupted")
             flag_break = False
@@ -597,10 +615,12 @@ def learner(
                         agent_ckpt = checkpoints.save_checkpoint(
                             FLAGS.checkpoint_path, agent.state, step=update_steps, keep=100
                         )
-                        replay_buffer.save(
-                            "replay_buffer_learner.npz"
-                        )  # not yet supported for QueuedDataStore
-                        # TODO: save other parts of training state
+                        with open("replay_buffer_learner.npz","wb") as f:
+                            pickle.dump(replay_buffer, f)
+                        # replay_buffer.save(
+                        #     "replay_buffer_learner.npz"
+                        # )  # not yet supported for QueuedDataStore
+                        # # TODO: save other parts of training state
                     else:
                         print("Training state not saved")
                     print("Stopping learner client")
@@ -726,8 +746,8 @@ def main(_):
             )
             offline_data = populate_data_store(
                 offline_data, [FLAGS.data_store_path])
-            replay_buffer = populate_data_store(
-                replay_buffer, [FLAGS.data_store_path])
+            # replay_buffer = populate_data_store(
+            #     replay_buffer, [FLAGS.data_store_path])
             print_green("Loaded offline data store from " +
                         FLAGS.data_store_path)
         else:
