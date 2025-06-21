@@ -249,7 +249,10 @@ def learner(rng, agent: BC1Agent, replay_buffer, replay_iterator):
         with timer.context("train"):
             agent, update_info = agent.update_high_utd(
                 batch, utd_ratio=FLAGS.utd_ratio)
+            q_info = agent.get_q_info(
+                fixed_offline_batch, utd_ratio=FLAGS.utd_ratio)
             agent = jax.block_until_ready(agent)
+            q_info = {k: float(v.item()) for k, v in q_info.items()}
 
             # publish the updated network
             server.publish_network(agent.state.params)
@@ -258,6 +261,7 @@ def learner(rng, agent: BC1Agent, replay_buffer, replay_iterator):
             wandb_logger.log(update_info, step=update_steps)
             wandb_logger.log(
                 {"timer": timer.get_average_times()}, step=update_steps)
+            wandb_logger.log(q_info, step=update_steps)
 
         if FLAGS.checkpoint_period and update_steps % FLAGS.checkpoint_period == 0:
             assert FLAGS.checkpoint_path is not None

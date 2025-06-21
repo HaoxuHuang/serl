@@ -204,7 +204,11 @@ class BasketEnv(MujocoGymEnv):
         obs = self._compute_observation()
         rew, rew_info = self._compute_reward(action)
         terminated = self._compute_terminated()
-        info = {}
+        action_norm = np.linalg.norm(action)
+        action_max = np.max(np.abs(action))
+        info = {'env_action_norm': action_norm, 'env_action_max': action_max}
+        for i in range(len(action)):
+            info[f"env_action{i}"] = action[i]
         info['reward'] = rew_info
         return obs, rew, terminated, False, info
 
