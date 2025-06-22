@@ -1,3 +1,7 @@
+See `videos/` for supplementary videos.
+
+-----
+
 # SERL: A Software Suite for Sample-Efficient Robotic Reinforcement Learning
 
 ![](https://github.com/rail-berkeley/serl/workflows/pre-commit/badge.svg)
