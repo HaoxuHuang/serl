@@ -26,6 +26,7 @@ from serl_launcher.agents.continuous.sac import SACAgent
 from serl_launcher.common.evaluation import evaluate
 from serl_launcher.utils.timer_utils import Timer
 from serl_launcher.data.data_store import populate_data_store
+from serl_launcher.networks.actor_critic_nets import TanhMultivariateNormalDiag
 
 import franka_sim
 
@@ -134,6 +135,9 @@ def actor(rng, agent: SACAgent, demo, checkpoints_path, sampling_rng):
 
     modes = [[] for _ in range(7)]
     stds = [[] for _ in range(7)]
+    avg_mode_norm = []
+    avg_sample_norm = []
+    avg_std = []
 
     for update_steps, checkpoint_path in checkpoints_path:
         params = checkpoints.restore_checkpoint(checkpoint_path, target=None)
@@ -152,15 +156,22 @@ def actor(rng, agent: SACAgent, demo, checkpoints_path, sampling_rng):
             sampling_rng, key = jax.random.split(sampling_rng)
             dist = agent.forward_policy(obs, rng=key, train=False)
             std = dist.distribution._scale_diag
-            # mode = dist.mode()
-            from serl_launcher.networks.actor_critic_nets import (
-                TanhMultivariateNormalDiag,
-            )
 
-            dist = TanhMultivariateNormalDiag(
+            mode = dist.mode()
+            sample_dist = TanhMultivariateNormalDiag(
                 dist.distribution._loc, dist.distribution._scale_diag * 0.3
             )
-            mode = dist.sample(seed=sampling_rng)
+            sample = sample_dist.sample(seed=sampling_rng)
+            avg_mode_norm.append(
+                jnp.mean(jnp.linalg.norm(mode, axis=-1)).item()
+            )  # average norm of the modes
+            avg_sample_norm.append(
+                jnp.mean(jnp.linalg.norm(sample, axis=-1)).item()
+            )  # average norm of the samples
+            avg_std.append(jnp.mean(std).item())  # average std of the modes
+
+            # mode = sample
+
             mode = np.asarray(jax.device_get(mode))
             std = np.asarray(jax.device_get(std))
             trajectory_mode = [[] for _ in range(7)]
@@ -187,84 +198,122 @@ def actor(rng, agent: SACAgent, demo, checkpoints_path, sampling_rng):
         # if wandb_logger:
         #     wandb_logger.log({"timer": timer.get_average_times()}, step=update_steps)
         #     wandb_logger.log(info, step=update_steps)
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
-    for i in range(7):
-        import matplotlib.pyplot as plt
-        
-        plt.figure(figsize=(10, 6))
-        correct_actions = [transition["actions"][i] for transition in demo]
+    # for i in range(7):
+    #     
 
-        plt.plot(correct_actions, label="Correct Actions", linestyle="--", color="red")
-        for idx, trajectory in enumerate(modes[i]):
-            print(len(trajectory))
-            plt.plot(trajectory, label=f"Update Step {checkpoints_path[idx][0]}")
-        
-        # concatenated_trajectory = []
-        # colors = plt.cm.viridis(np.linspace(0, 1, len(modes[i])))
-        # concatenated_trajectory.extend(correct_actions)
-        # plt.plot(
-        #     range(
-        #         len(concatenated_trajectory) - len(correct_actions),
-        #         len(concatenated_trajectory),
-        #     ),
-        #     correct_actions,
-        #     label="Correct Actions",
-        #     linestyle="--",
-        #     color="grey",
-        # )
-        # for idx, trajectory in enumerate(modes[i]):
-        #     concatenated_trajectory.extend(trajectory)
-        #     plt.plot(
-        #         range(
-        #             len(concatenated_trajectory) - len(trajectory),
-        #             len(concatenated_trajectory),
-        #         ),
-        #         trajectory,
-        #         label=f"Update Step {checkpoints_path[idx][0]}",
-        #         color=colors[idx],
-        #     )
-        #     plt.plot(
-        #         range(
-        #             len(concatenated_trajectory) - len(correct_actions),
-        #             len(concatenated_trajectory),
-        #         ),
-        #         correct_actions,
-        #         linestyle="--",
-        #         color="grey",
-        #     )
-        
-        plt.title(f"Trajectory Modes for Joint {i}")
-        plt.xlabel("Time Step")
-        plt.ylabel("Mode Value")
-        plt.legend()
-        plt.grid()
-        plt.show()
+    #     plt.figure(figsize=(60, 18))
+    #     correct_actions = [transition["actions"][i] for transition in demo]
 
-        plt.figure(figsize=(10, 6))
+    #     plt.plot(correct_actions, label="Correct Actions", linestyle="--", color="red")
+    #     for idx, trajectory in enumerate(modes[i]):
+    #         print(len(trajectory))
+    #         plt.plot(trajectory, label=f"Update Step {checkpoints_path[idx][0]}")
 
-        for idx, trajectory in enumerate(stds[i]):
-            plt.plot(trajectory, label=f"Update Step {checkpoints_path[idx][0]}")
+    #     # concatenated_trajectory = []
+    #     # colors = plt.cm.viridis(np.linspace(0, 1, len(modes[i])))
+    #     # concatenated_trajectory.extend(correct_actions)
+    #     # plt.plot(
+    #     #     range(
+    #     #         len(concatenated_trajectory) - len(correct_actions),
+    #     #         len(concatenated_trajectory),
+    #     #     ),
+    #     #     correct_actions,
+    #     #     label="Correct Actions",
+    #     #     linestyle="--",
+    #     #     color="grey",
+    #     # )
+    #     # for idx, trajectory in enumerate(modes[i]):
+    #     #     concatenated_trajectory.extend(trajectory)
+    #     #     plt.plot(
+    #     #         range(
+    #     #             len(concatenated_trajectory) - len(trajectory),
+    #     #             len(concatenated_trajectory),
+    #     #         ),
+    #     #         trajectory,
+    #     #         label=f"Update Step {checkpoints_path[idx][0]}",
+    #     #         color=colors[idx],
+    #     #     )
+    #     #     plt.plot(
+    #     #         range(
+    #     #             len(concatenated_trajectory) - len(correct_actions),
+    #     #             len(concatenated_trajectory),
+    #     #         ),
+    #     #         correct_actions,
+    #     #         linestyle="--",
+    #     #         color="grey",
+    #     #     )
 
-        # concatenated_trajectory = []
-        # colors = plt.cm.viridis(np.linspace(0, 1, len(stds[i])))
-        # for idx, trajectory in enumerate(stds[i]):
-        #     concatenated_trajectory.extend(trajectory)
-        #     plt.plot(
-        #         range(
-        #             len(concatenated_trajectory) - len(trajectory),
-        #             len(concatenated_trajectory),
-        #         ),
-        #         trajectory,
-        #         label=f"Update Step {checkpoints_path[idx][0]}",
-        #         color=colors[idx],
-        #     )
+    #     plt.title(f"Trajectory Modes for Joint {i}")
+    #     plt.xlabel("Time Step")
+    #     plt.ylabel("Mode Value")
+    #     plt.legend()
+    #     plt.grid()
+    #     # plt.show()
+    #     plt.savefig(f"plots/trajectory_modes_joint_{i}.svg")
+    #     plt.close()
 
-        plt.title(f"Trajectory Standard Deviations for Joint {i}")
-        plt.xlabel("Time Step")
-        plt.ylabel("Standard Deviation Value")
-        plt.legend()
-        plt.grid()
-        plt.show()
+    #     plt.figure(figsize=(60, 18))
+
+    #     for idx, trajectory in enumerate(stds[i]):
+    #         plt.plot(trajectory, label=f"Update Step {checkpoints_path[idx][0]}")
+
+    #     # concatenated_trajectory = []
+    #     # colors = plt.cm.viridis(np.linspace(0, 1, len(stds[i])))
+    #     # for idx, trajectory in enumerate(stds[i]):
+    #     #     concatenated_trajectory.extend(trajectory)
+    #     #     plt.plot(
+    #     #         range(
+    #     #             len(concatenated_trajectory) - len(trajectory),
+    #     #             len(concatenated_trajectory),
+    #     #         ),
+    #     #         trajectory,
+    #     #         label=f"Update Step {checkpoints_path[idx][0]}",
+    #     #         color=colors[idx],
+    #     #     )
+
+    #     plt.title(f"Trajectory Standard Deviations for Joint {i}")
+    #     plt.xlabel("Time Step")
+    #     plt.ylabel("Standard Deviation Value")
+    #     plt.legend()
+    #     plt.grid()
+    #     # plt.show()
+    #     plt.savefig(f"plots/trajectory_stds_joint_{i}.svg")
+    #     plt.close()
+
+    plt.figure(figsize=(6, 5))
+    update_steps = [step for step, _ in checkpoints_path]
+    plt.plot(update_steps, avg_mode_norm, label="Average Norm of Modes")
+    # plt.xticks(update_steps)
+    plt.xlabel("Update Steps")
+    plt.ylabel("Average Action Norm Value (Mode)")
+    plt.legend()
+    plt.grid()
+    plt.savefig("plots/average_norm_modes.svg")
+    plt.close()
+
+    plt.figure(figsize=(6, 5))
+    plt.plot(update_steps, avg_sample_norm, label="Average Norm of Samples")
+    # plt.xticks(update_steps)
+    plt.xlabel("Update Steps")
+    plt.ylabel("Average Action Norm Value (Sample)")
+    plt.legend()
+    plt.grid()
+    plt.savefig("plots/average_norm_samples.svg")
+    plt.close()
+
+    plt.figure(figsize=(6, 5))
+    plt.plot(update_steps, avg_std, label="Average Standard Deviation")
+    # plt.xticks(update_steps)
+    plt.xlabel("Update Steps")
+    plt.ylabel("Average Standard Deviation Value")
+    plt.legend()
+    plt.grid()
+    plt.savefig("plots/average_std.svg")
+    plt.close()
 
     print("Actory loop finished")
 
@@ -336,8 +385,8 @@ def main(_):
 
     checkpoints_path = []
 
-    root_path = "/home/drl/Code/serl/examples/async_sac_state_real_basketball/checkpoints/checkpoints_2025-06-21_17-22-08"
-    steps = range(5000, 25001, 5000)
+    root_path = "/home/drl/Code/serl/examples/async_sac_state_real_basketball/checkpoints/checkpoints_2025-06-17_20-09-34"
+    steps = range(10000, 390001, 10000)
     for step in steps:
         checkpoint_path = os.path.join(root_path, f"checkpoint_{step}")
         checkpoints_path.append((step, checkpoint_path))
